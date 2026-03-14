@@ -26,16 +26,13 @@ class IndexedVectorDocument:
     persisted: bool
 
 
-@dataclass(slots=True)
-class VectorSearchResult:
-    """Resolved search result ready for API serialization."""
-
-    doc_id: str
-    score: float
-
-
 class VectorIndexBuilder:
-    """Coordinates embedding generation, batching, indexing and persistence."""
+    """Coordinates embedding generation, batching, indexing and persistence.
+
+    This domain only owns ingestion concerns. Query-time dense retrieval is
+    expected to live in a separate neural IR domain that loads the persisted
+    FAISS index and performs search there.
+    """
 
     def __init__(self, settings: VectorSettings) -> None:
         self.settings = settings
@@ -104,32 +101,6 @@ class VectorIndexBuilder:
                 indexed_documents=len(self.vector_store),
                 persisted=persisted,
             )
-
-    def search(self, query: str, top_k: int) -> list[VectorSearchResult]:
-        """Search nearest documents for the provided query."""
-        if not query.strip():
-            raise ValueError("Search query must not be empty.")
-
-        with self._lock:
-            if self._buffer_doc_ids:
-                self._flush_locked(force=True)
-
-            if len(self.vector_store) == 0:
-                return []
-
-            query_vector = self.embedding_model.encode_one(query)
-            search_k = min(top_k, len(self.vector_store))
-            scores, vector_ids = self.faiss_index.search(query_vector, search_k)
-
-            results: list[VectorSearchResult] = []
-            for score, vector_id in zip(scores[0], vector_ids[0]):
-                if int(vector_id) < 0:
-                    continue
-                doc_id = self.vector_store.get_doc_id(int(vector_id))
-                if doc_id is None:
-                    continue
-                results.append(VectorSearchResult(doc_id=doc_id, score=float(score)))
-            return results
 
     def _flush_locked(self, force: bool = False) -> bool:
         """Flush buffered vectors into FAISS and persist the index."""

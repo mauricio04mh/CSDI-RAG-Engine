@@ -28,26 +28,6 @@ class VectorIndexDocumentResponse(BaseModel):
     persisted: bool
 
 
-class VectorSearchRequest(BaseModel):
-    """Payload for dense retrieval queries."""
-
-    query: str = Field(..., min_length=1, description="User query to embed and search.")
-    top_k: int = Field(default=10, ge=1, le=100, description="Maximum number of nearest neighbors to return.")
-
-
-class VectorSearchResultItem(BaseModel):
-    """One similarity search hit."""
-
-    doc_id: str
-    score: float
-
-
-class VectorSearchResponse(BaseModel):
-    """Similarity search response."""
-
-    results: list[VectorSearchResultItem]
-
-
 @router.post("/index", response_model=VectorIndexDocumentResponse)
 async def index_document(payload: VectorIndexDocumentRequest, request: Request) -> VectorIndexDocumentResponse:
     """Generate an embedding and enqueue the document into the FAISS pipeline."""
@@ -66,21 +46,4 @@ async def index_document(payload: VectorIndexDocumentRequest, request: Request) 
         buffered_documents=result.buffered_documents,
         indexed_documents=result.indexed_documents,
         persisted=result.persisted,
-    )
-
-
-@router.post("/search", response_model=VectorSearchResponse)
-async def search(payload: VectorSearchRequest, request: Request) -> VectorSearchResponse:
-    """Encode the query and run nearest-neighbor search against FAISS."""
-    builder: VectorIndexBuilder = request.app.state.vector_index_builder
-    try:
-        results = builder.search(query=payload.query, top_k=payload.top_k)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive API guard
-        logger.exception("vector_search_failed query=%s", payload.query)
-        raise HTTPException(status_code=500, detail="Vector search failed.") from exc
-
-    return VectorSearchResponse(
-        results=[VectorSearchResultItem(doc_id=result.doc_id, score=result.score) for result in results]
     )
