@@ -1,0 +1,32 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: csdi-rag-engine-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8888}:8888"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      QDRANT_URL: http://qdrant:6333
+      PYTHONPATH: /app
+    volumes:
+      - ./:/app
+    depends_on:
+      qdrant:
+        condition: service_started
+    command: uvicorn src.api.server:app --host 0.0.0.0 --port 8888 --reload
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    container_name: csdi-rag-engine-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
