@@ -12,6 +12,13 @@ router = APIRouter(tags=["bm25"])
 
 
 class BM25SearchRequest(BaseModel):
+<<<<<<< HEAD
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(default=20, ge=1, le=100)
+
+
+class BM25SearchResultItem(BaseModel):
+=======
     """Payload for lexical BM25 search."""
 
     query: str = Field(..., min_length=1, description="User query to score against the inverted index.")
@@ -21,13 +28,17 @@ class BM25SearchRequest(BaseModel):
 class BM25SearchResultItem(BaseModel):
     """One BM25-ranked search hit."""
 
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     doc_id: str
     score: float
 
 
 class BM25SearchResponse(BaseModel):
+<<<<<<< HEAD
+=======
     """Response returned by the BM25 retrieval endpoint."""
 
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     results: list[BM25SearchResultItem]
 
 
@@ -39,8 +50,18 @@ def search_bm25(payload: BM25SearchRequest, request: Request) -> BM25SearchRespo
         results = retriever.search(query=payload.query, top_k=payload.top_k)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+<<<<<<< HEAD
+    except Exception as exc:
+        logger.exception("bm25_search_failed query=%s", payload.query)
+        raise HTTPException(status_code=500, detail="BM25 search failed.") from exc
+
+    return BM25SearchResponse(
+        results=[BM25SearchResultItem(doc_id=r.doc_id, score=r.score) for r in results]
+    )
+=======
     except Exception as exc:  # pragma: no cover - defensive API guard
         logger.exception("bm25_search_failed query=%s", payload.query)
         raise HTTPException(status_code=500, detail="BM25 search failed.") from exc
 
     return BM25SearchResponse(results=[BM25SearchResultItem(doc_id=result.doc_id, score=result.score) for result in results])
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530

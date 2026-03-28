@@ -30,4 +30,8 @@ class VectorIndexMetadata(Base):
     hnsw_ef_construction: Mapped[int] = mapped_column(Integer, nullable=False)
     hnsw_ef_search: Mapped[int] = mapped_column(Integer, nullable=False)
     vector_count: Mapped[int] = mapped_column(Integer, nullable=False)
+<<<<<<< HEAD
+    updated_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)
+=======
     updated_at: Mapped[str] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530

@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class IndexedVectorDocument:
-    """Result metadata after indexing a document."""
-
     doc_id: str
     buffered_documents: int
     indexed_documents: int
@@ -29,7 +27,11 @@ class IndexedVectorDocument:
 class VectorIndexBuilder:
     """Coordinates embedding generation, batching, FAISS indexing and DB persistence.
 
+<<<<<<< HEAD
+    PostgreSQL (pgvector) is the source of truth. FAISS is rebuilt from the
+=======
     PostgreSQL (via pgvector) is the source of truth. FAISS is rebuilt from the
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     database on startup and used for fast ANN search at query time.
     """
 
@@ -67,6 +69,12 @@ class VectorIndexBuilder:
             ef_construction=self.settings.hnsw_ef_construction,
             ef_search=self.settings.hnsw_ef_search,
         )
+<<<<<<< HEAD
+        batch_size = 1000
+        for i in range(0, len(doc_ids), batch_size):
+            self.vector_store.add_documents(doc_ids[i : i + batch_size])
+            self.faiss_index.add(vectors[i : i + batch_size])
+=======
         # Load in batches to avoid memory spikes on large corpora
         batch_size = 1000
         for i in range(0, len(doc_ids), batch_size):
@@ -74,16 +82,15 @@ class VectorIndexBuilder:
             batch_vectors = vectors[i : i + batch_size]
             self.vector_store.add_documents(batch_ids)
             self.faiss_index.add(batch_vectors)
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
 
         logger.info("vector_index_loaded vectors=%s", len(self.vector_store))
 
     def stop(self) -> None:
-        """Flush and persist any buffered vectors before shutdown."""
         with self._lock:
             self._flush_locked(force=True)
 
     def add_document(self, doc_id: str, text: str) -> IndexedVectorDocument:
-        """Generate an embedding for the document and enqueue it for indexing."""
         if not text.strip():
             raise ValueError("Document text must not be empty.")
 
@@ -108,16 +115,22 @@ class VectorIndexBuilder:
             )
 
     def _flush_locked(self, force: bool = False) -> bool:
+<<<<<<< HEAD
+=======
         """Flush buffered vectors into FAISS and persist to the database."""
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         if not self._buffer_doc_ids:
             return False
-
         if not force and len(self._buffer_doc_ids) < self.settings.vector_batch_size:
             return False
 
         vectors = np.vstack(self._buffer_vectors).astype(np.float32)
         self.vector_store.add_documents(self._buffer_doc_ids)
         self.faiss_index.add(vectors)
+<<<<<<< HEAD
+        self._vector_repo.save_documents(self._buffer_doc_ids, vectors)
+        self._vector_repo.save_metadata({
+=======
         self._persist(self._buffer_doc_ids, vectors)
         self._buffer_doc_ids = []
         self._buffer_vectors = []
@@ -127,6 +140,7 @@ class VectorIndexBuilder:
         """Persist new vectors to the database."""
         self._vector_repo.save_documents(doc_ids, vectors)
         metadata = {
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
             "embedding_model": self.settings.embedding_model,
             "vector_dimension": self.settings.vector_dimension,
             "faiss_index_type": self.settings.faiss_index_type,
@@ -134,5 +148,12 @@ class VectorIndexBuilder:
             "hnsw_ef_construction": self.settings.hnsw_ef_construction,
             "hnsw_ef_search": self.settings.hnsw_ef_search,
             "vector_count": len(self.vector_store),
+<<<<<<< HEAD
+        })
+        self._buffer_doc_ids = []
+        self._buffer_vectors = []
+        return True
+=======
         }
         self._vector_repo.save_metadata(metadata)
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530

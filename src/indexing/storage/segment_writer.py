@@ -10,7 +10,11 @@ logger = logging.getLogger(__name__)
 class SegmentWriter:
     """Writes immutable segments to the database via BM25Repository."""
 
+<<<<<<< HEAD
+    def __init__(self, repository) -> None:
+=======
     def __init__(self, repository) -> None:  # BM25Repository — avoid circular import
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         self.repository = repository
 
     def write(self, segment: IndexSegment) -> str:

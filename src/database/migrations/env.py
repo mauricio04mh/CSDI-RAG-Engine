@@ -24,12 +24,16 @@ def get_url() -> str:
 
 
 def run_migrations_offline() -> None:
+<<<<<<< HEAD
+    context.configure(url=get_url(), target_metadata=target_metadata, literal_binds=True, dialect_opts={"paramstyle": "named"})
+=======
     context.configure(
         url=get_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     with context.begin_transaction():
         context.run_migrations()
 
@@ -37,11 +41,15 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     cfg = config.get_section(config.config_ini_section, {})
     cfg["sqlalchemy.url"] = get_url()
+<<<<<<< HEAD
+    connectable = engine_from_config(cfg, prefix="sqlalchemy.", poolclass=pool.NullPool)
+=======
     connectable = engine_from_config(
         cfg,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
