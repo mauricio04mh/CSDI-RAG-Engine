@@ -1,9 +1,13 @@
 from __future__ import annotations
+
 import logging
 import threading
 import time
 from dataclasses import dataclass
 
+from sqlalchemy.engine import Engine
+
+from src.database.repositories.bm25_repository import BM25Repository
 from src.indexing.builder.segment_builder import IndexSegment, SegmentBuilder
 from src.indexing.builder.segment_merge_policy import SegmentMergePolicy
 from src.indexing.builder.segment_merger import MergeResult, SegmentMerger
@@ -40,12 +44,13 @@ class MergeExecutionResult:
 class IndexBuilder:
     """Coordinates in-memory indexing and periodic segment flushing."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, engine: Engine) -> None:
         self.settings = settings
         self.active_state = ActiveIndexState()
         self.segment_builder = SegmentBuilder()
-        self.segment_writer = SegmentWriter(settings.index_segment_path)
-        self.segment_reader = SegmentReader(settings.index_segment_path)
+        self._bm25_repo = BM25Repository(engine)
+        self.segment_writer = SegmentWriter(self._bm25_repo)
+        self.segment_reader = SegmentReader(self._bm25_repo)
         self.segment_merge_policy = SegmentMergePolicy(settings.index_max_segments_in_memory)
         self.segment_merger = SegmentMerger(
             segment_reader=self.segment_reader,
@@ -123,7 +128,7 @@ class IndexBuilder:
             )
 
     def flush(self, force: bool = False) -> str | None:
-        """Flush the in-memory segment to disk if thresholds require it."""
+        """Flush the in-memory segment to the database if thresholds require it."""
         with self._lock:
             segment = self._flush_locked(force=force)
             return segment.segment_id if segment else None
@@ -180,15 +185,15 @@ class IndexBuilder:
         merge_results: list[MergeResult] = []
 
         while True:
-            segment_paths = self.segment_reader.list_segments()
-            candidates = self.segment_merge_policy.select_candidates(segment_paths)
+            segment_ids = self.segment_reader.list_segments()
+            candidates = self.segment_merge_policy.select_candidates(segment_ids)
             if not candidates:
                 break
 
             logger.info(
                 "segment_merge_started candidate_count=%s candidates=%s",
                 len(candidates),
-                ",".join(path.name for path in candidates),
+                ",".join(candidates),
             )
             result = self.segment_merger.merge(candidates)
             if result is None:

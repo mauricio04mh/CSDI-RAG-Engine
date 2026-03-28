@@ -2,8 +2,11 @@ fastapi==0.116.1
 uvicorn[standard]==0.35.0
 httpx==0.28.1
 python-dotenv==1.1.1
-msgpack==1.1.1
 numpy==2.2.6
 sentence-transformers==3.4.1
 faiss-cpu==1.10.0
 pydantic==2.11.7
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+alembic==1.14.0

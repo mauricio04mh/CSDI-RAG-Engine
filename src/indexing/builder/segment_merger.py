@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 
 from src.indexing.builder.segment_builder import IndexSegment, SegmentBuilder
 from src.indexing.storage.segment_reader import SegmentReader
@@ -34,18 +34,17 @@ class SegmentMerger:
         self.segment_writer = segment_writer
         self.segment_builder = segment_builder
 
-    def merge(self, segment_paths: list[Path]) -> MergeResult | None:
+    def merge(self, segment_ids: list[str]) -> MergeResult | None:
         """Merge multiple persisted segments into a single new segment."""
-        if len(segment_paths) < 2:
+        if len(segment_ids) < 2:
             return None
 
-        ordered_paths = sorted(segment_paths)
-        segments = [self.segment_reader.read(path) for path in ordered_paths]
+        ordered_ids = sorted(segment_ids)
+        segments = [self.segment_reader.read(segment_id) for segment_id in ordered_ids]
         merged_segment = self._build_merged_segment(segments)
-        self.segment_writer.write(merged_segment)
 
-        for path in ordered_paths:
-            self.segment_writer.delete(path)
+        # Atomic write + delete via repository
+        self.segment_writer.repository.merge_and_replace(merged_segment, ordered_ids)
 
         result = MergeResult(
             merged_segment_id=merged_segment.segment_id,
