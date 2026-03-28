@@ -6,20 +6,24 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.api.indexing_routes import router as indexing_router
-from src.api.search_route import router as search_router
-from src.api.vector_indexing_routes import router as vector_indexing_router
 from src.bm25.api.bm25_routes import router as bm25_router
 from src.bm25.config.settings import load_settings as load_bm25_settings
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.database.config import build_engine
+from src.database.repositories.chunk_repository import ChunkRepository
+from src.hybrid.api.routes import router as search_router
+from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
+from src.indexing.api.routes import router as indexing_router
 from src.indexing.builder.index_builder import IndexBuilder
 from src.indexing.config.settings import load_settings as load_indexing_settings
+from src.orchestrator.api.routes import router as ingestion_router
+from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
+from src.sources_config.source_config_repository import SourceConfigRepository
+from src.vector_indexing.api.routes import router as vector_indexing_router
 from src.vector_indexing.config.settings import load_settings as load_vector_settings
 from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
 from src.vector_retrieval.api.vector_search_routes import router as vector_search_router
 from src.vector_retrieval.pipeline.vector_retriever import VectorRetriever
-from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
 
 
 def configure_logging(log_level: str) -> None:
@@ -50,6 +54,14 @@ def create_app() -> FastAPI:
         bm25_retriever=bm25_retriever,
         vector_retriever=vector_retriever,
     )
+    source_repo = SourceConfigRepository()
+    chunk_repo = ChunkRepository(engine)
+    ingestion_orchestrator = IngestionOrchestrator(
+        source_repo=source_repo,
+        index_builder=index_builder,
+        vector_index_builder=vector_index_builder,
+        chunk_repo=chunk_repo,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -62,6 +74,9 @@ def create_app() -> FastAPI:
         app.state.vector_index_builder = vector_index_builder
         app.state.vector_retriever = vector_retriever
         app.state.hybrid_retriever = hybrid_retriever
+        app.state.source_repo = source_repo
+        app.state.chunk_repo = chunk_repo
+        app.state.ingestion_orchestrator = ingestion_orchestrator
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()
@@ -83,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(indexing_router)
     app.include_router(vector_indexing_router)
     app.include_router(vector_search_router)
+    app.include_router(ingestion_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:
