@@ -53,7 +53,7 @@ def index_document(payload: IndexDocumentRequest, request: Request) -> IndexDocu
         result = index_builder.add_document(doc_id=payload.doc_id, tokens=payload.tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive API guard
+    except Exception as exc:
         logger.exception("indexing_failed doc_id=%s", payload.doc_id)
         raise HTTPException(status_code=500, detail="Indexing failed.") from exc
 
@@ -72,7 +72,7 @@ def merge_segments(request: Request) -> MergeResponse:
     index_builder: IndexBuilder = request.app.state.index_builder
     try:
         result = index_builder.merge_segments()
-    except Exception as exc:  # pragma: no cover - defensive API guard
+    except Exception as exc:
         logger.exception("segment_merge_failed")
         raise HTTPException(status_code=500, detail="Segment merge failed.") from exc
 

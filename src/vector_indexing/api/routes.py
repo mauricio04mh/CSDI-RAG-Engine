@@ -36,7 +36,7 @@ def index_document(payload: VectorIndexDocumentRequest, request: Request) -> Vec
         result = builder.add_document(doc_id=payload.doc_id, text=payload.text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive API guard
+    except Exception as exc:
         logger.exception("vector_indexing_failed doc_id=%s", payload.doc_id)
         raise HTTPException(status_code=500, detail="Vector indexing failed.") from exc
 

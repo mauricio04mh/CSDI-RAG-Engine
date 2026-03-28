@@ -16,17 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-<<<<<<< HEAD
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-=======
-    # Enable pgvector extension
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
-    # ------------------------------------------------------------------ #
-    # BM25 tables
-    # ------------------------------------------------------------------ #
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     op.create_table(
         "bm25_segments",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -38,10 +29,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("segment_id"),
     )
-<<<<<<< HEAD
-=======
-
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     op.create_table(
         "bm25_terms",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -53,10 +40,6 @@ def upgrade() -> None:
     )
     op.create_index("idx_bm25_terms_segment", "bm25_terms", ["segment_id"])
     op.create_index("idx_bm25_terms_term", "bm25_terms", ["term"])
-<<<<<<< HEAD
-=======
-
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     op.create_table(
         "bm25_postings",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -67,10 +50,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("idx_bm25_postings_term_id", "bm25_postings", ["term_id"])
-<<<<<<< HEAD
-=======
-
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     op.create_table(
         "bm25_doc_lengths",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -82,38 +61,21 @@ def upgrade() -> None:
     )
     op.create_index("idx_bm25_doc_lengths_segment", "bm25_doc_lengths", ["segment_id"])
 
-<<<<<<< HEAD
-=======
-    # ------------------------------------------------------------------ #
-    # Vector tables
-    # ------------------------------------------------------------------ #
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     op.create_table(
         "vector_documents",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("doc_id", sa.Text(), nullable=False),
-<<<<<<< HEAD
         sa.Column("embedding", sa.Text(), nullable=False),
-=======
-        sa.Column("embedding", sa.Text(), nullable=False),  # overridden below
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         sa.Column("indexed_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("doc_id"),
     )
-<<<<<<< HEAD
-    op.execute("ALTER TABLE vector_documents ALTER COLUMN embedding TYPE vector(384) USING embedding::vector(384)")
-    op.create_index("idx_vector_documents_doc_id", "vector_documents", ["doc_id"])
-    op.execute("CREATE INDEX idx_vector_embedding_hnsw ON vector_documents USING hnsw (embedding vector_ip_ops)")
-=======
-    # Replace the placeholder TEXT column with a proper vector(384) column
     op.execute("ALTER TABLE vector_documents ALTER COLUMN embedding TYPE vector(384) USING embedding::vector(384)")
     op.create_index("idx_vector_documents_doc_id", "vector_documents", ["doc_id"])
     op.execute(
         "CREATE INDEX idx_vector_embedding_hnsw ON vector_documents "
         "USING hnsw (embedding vector_ip_ops)"
     )
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
 
     op.create_table(
         "vector_index_metadata",
