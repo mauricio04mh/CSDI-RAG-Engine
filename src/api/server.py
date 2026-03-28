@@ -19,6 +19,7 @@ from src.vector_indexing.config.settings import load_settings as load_vector_set
 from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
 from src.vector_retrieval.api.vector_search_routes import router as vector_search_router
 from src.vector_retrieval.pipeline.vector_retriever import VectorRetriever
+from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
 
 
 def configure_logging(log_level: str) -> None:
@@ -45,6 +46,10 @@ def create_app() -> FastAPI:
         vector_store=vector_index_builder.vector_store,
         lock=vector_index_builder._lock,
     )
+    hybrid_retriever = HybridRetriever(
+        bm25_retriever=bm25_retriever,
+        vector_retriever=vector_retriever,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -56,6 +61,7 @@ def create_app() -> FastAPI:
         app.state.bm25_retriever = bm25_retriever
         app.state.vector_index_builder = vector_index_builder
         app.state.vector_retriever = vector_retriever
+        app.state.hybrid_retriever = hybrid_retriever
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()
