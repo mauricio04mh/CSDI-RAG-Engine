@@ -1,0 +1,102 @@
+[
+  {
+    "source_id": "python_docs",
+    "name": "Python Docs",
+    "base_url": "https://docs.python.org",
+    "allowed_domains": ["docs.python.org"],
+    "seed_urls": [
+      "https://docs.python.org/3/tutorial/",
+      "https://docs.python.org/3/library/"
+    ],
+    "allowed_path_prefixes": [
+      "/3/tutorial/",
+      "/3/library/"
+    ],
+    "blocked_path_patterns": [
+      "/search.html",
+      "/genindex",
+      "/py-modindex"
+    ],
+    "max_depth": 2,
+    "use_browser_fallback": false,
+    "technology": ["python"],
+    "scraper": {
+      "main_content_selectors": [
+        "main[role=\"main\"]",
+        "div[role=\"main\"]",
+        ".body",
+        ".document"
+      ],
+      "title_selectors": [
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        ".related[role=\"navigation\"] a",
+        ".breadcrumbs a"
+      ],
+      "code_block_selectors": [
+        "div.highlight pre",
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        ".sphinxsidebar",
+        ".related"
+      ]
+    }
+  },
+  {
+    "source_id": "mdn_js",
+    "name": "MDN JavaScript",
+    "base_url": "https://developer.mozilla.org",
+    "allowed_domains": ["developer.mozilla.org"],
+    "seed_urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
+      "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference"
+    ],
+    "allowed_path_prefixes": [
+      "/en-US/docs/Web/JavaScript/"
+    ],
+    "blocked_path_patterns": [
+      "/search"
+    ],
+    "max_depth": 1,
+    "use_browser_fallback": true,
+    "technology": ["javascript", "web"],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "article",
+        "[role=\"main\"]"
+      ],
+      "title_selectors": [
+        "main h1",
+        "article h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        "nav[aria-label=\"Breadcrumb\"] a",
+        ".breadcrumb a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside"
+      ]
+    }
+  }
+]
