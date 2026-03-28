@@ -46,7 +46,7 @@ class MergeResponse(BaseModel):
 
 
 @router.post("/index", response_model=IndexDocumentResponse)
-async def index_document(payload: IndexDocumentRequest, request: Request) -> IndexDocumentResponse:
+def index_document(payload: IndexDocumentRequest, request: Request) -> IndexDocumentResponse:
     """Receive a tokenized document and add it to the active BM25 index segment."""
     index_builder: IndexBuilder = request.app.state.index_builder
     try:
@@ -67,7 +67,7 @@ async def index_document(payload: IndexDocumentRequest, request: Request) -> Ind
 
 
 @router.post("/merge", response_model=MergeResponse)
-async def merge_segments(request: Request) -> MergeResponse:
+def merge_segments(request: Request) -> MergeResponse:
     """Trigger a manual merge for persisted BM25 index segments."""
     index_builder: IndexBuilder = request.app.state.index_builder
     try:

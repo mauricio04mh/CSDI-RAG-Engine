@@ -19,8 +19,6 @@ ENV_DEFAULTS: dict[str, str] = {
     "HNSW_EF_CONSTRUCTION": "200",
     # HNSW search-time exploration parameter controlling recall and latency.
     "HNSW_EF_SEARCH": "50",
-    # Directory where the FAISS index and metadata are persisted.
-    "VECTOR_INDEX_PATH": "./vector_index",
     # Number of documents buffered before vectors are inserted into FAISS.
     "VECTOR_BATCH_SIZE": "128",
     # Logging verbosity used by the vector indexing service.
@@ -38,7 +36,6 @@ class VectorSettings:
     hnsw_m: int
     hnsw_ef_construction: int
     hnsw_ef_search: int
-    vector_index_path: str
     vector_batch_size: int
     log_level: str
     env_path: Path
@@ -76,12 +73,7 @@ def load_settings() -> VectorSettings:
     _ensure_env_file(env_path)
     load_dotenv(dotenv_path=env_path, override=False)
 
-    raw_index_path = os.getenv("VECTOR_INDEX_PATH", ENV_DEFAULTS["VECTOR_INDEX_PATH"])
-    index_path = Path(raw_index_path)
-    if not index_path.is_absolute():
-        index_path = project_root / index_path
-
-    settings = VectorSettings(
+    return VectorSettings(
         embedding_model=os.getenv("EMBEDDING_MODEL", ENV_DEFAULTS["EMBEDDING_MODEL"]),
         vector_dimension=_parse_positive_int(
             "VECTOR_DIMENSION",
@@ -97,7 +89,6 @@ def load_settings() -> VectorSettings:
             "HNSW_EF_SEARCH",
             os.getenv("HNSW_EF_SEARCH", ENV_DEFAULTS["HNSW_EF_SEARCH"]),
         ),
-        vector_index_path=str(index_path),
         vector_batch_size=_parse_positive_int(
             "VECTOR_BATCH_SIZE",
             os.getenv("VECTOR_BATCH_SIZE", ENV_DEFAULTS["VECTOR_BATCH_SIZE"]),
@@ -106,6 +97,3 @@ def load_settings() -> VectorSettings:
         env_path=env_path,
         project_root=project_root,
     )
-
-    Path(settings.vector_index_path).mkdir(parents=True, exist_ok=True)
-    return settings

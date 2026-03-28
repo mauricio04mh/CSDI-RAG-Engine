@@ -9,24 +9,33 @@ services:
       - "${APP_PORT:-8888}:8888"
     environment:
       APP_ENV: ${APP_ENV:-development}
-      QDRANT_URL: http://qdrant:6333
+      DATABASE_URL: postgresql://raguser:ragpassword@postgres:5432/ragengine
       PYTHONPATH: /app
     volumes:
       - ./:/app
     depends_on:
-      qdrant:
-        condition: service_started
+      postgres:
+        condition: service_healthy
     command: uvicorn src.api.server:app --host 0.0.0.0 --port 8888 --reload
 
-  qdrant:
-    image: qdrant/qdrant:v1.15.4
-    container_name: csdi-rag-engine-qdrant
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: csdi-rag-engine-postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpassword
+      POSTGRES_DB: ragengine
     ports:
-      - "${QDRANT_HTTP_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
+      - "${POSTGRES_PORT:-5444}:5432"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragengine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  qdrant_data:
+  postgres_data:
