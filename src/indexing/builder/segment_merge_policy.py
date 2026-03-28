@@ -14,5 +14,11 @@ class SegmentMergePolicy:
         ordered = sorted(segment_ids)
         if len(ordered) <= self.max_segments:
             return []
+<<<<<<< HEAD
         batch_size = max(2, len(ordered) - self.max_segments + 1)
+=======
+
+        batch_size = len(ordered) - self.max_segments + 1
+        batch_size = max(2, batch_size)
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         return ordered[:batch_size]

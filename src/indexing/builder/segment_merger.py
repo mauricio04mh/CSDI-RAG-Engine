@@ -35,12 +35,20 @@ class SegmentMerger:
         self.segment_builder = segment_builder
 
     def merge(self, segment_ids: list[str]) -> MergeResult | None:
+<<<<<<< HEAD
         """Merge multiple persisted segments into a single new segment atomically."""
+=======
+        """Merge multiple persisted segments into a single new segment."""
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         if len(segment_ids) < 2:
             return None
 
         ordered_ids = sorted(segment_ids)
+<<<<<<< HEAD
         segments = [self.segment_reader.read(sid) for sid in ordered_ids]
+=======
+        segments = [self.segment_reader.read(segment_id) for segment_id in ordered_ids]
+>>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         merged_segment = self._build_merged_segment(segments)
 
         # Atomic write + delete via repository

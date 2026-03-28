@@ -49,6 +49,9 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.db_engine = engine
+        app.state.indexing_settings = indexing_settings
+        app.state.bm25_settings = bm25_settings
+        app.state.vector_settings = vector_settings
         app.state.index_builder = index_builder
         app.state.bm25_retriever = bm25_retriever
         app.state.vector_index_builder = vector_index_builder
