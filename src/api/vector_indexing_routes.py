@@ -29,7 +29,7 @@ class VectorIndexDocumentResponse(BaseModel):
 
 
 @router.post("/index", response_model=VectorIndexDocumentResponse)
-async def index_document(payload: VectorIndexDocumentRequest, request: Request) -> VectorIndexDocumentResponse:
+def index_document(payload: VectorIndexDocumentRequest, request: Request) -> VectorIndexDocumentResponse:
     """Generate an embedding and enqueue the document into the FAISS pipeline."""
     builder: VectorIndexBuilder = request.app.state.vector_index_builder
     try:

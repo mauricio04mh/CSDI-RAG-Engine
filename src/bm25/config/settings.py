@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,21 +7,17 @@ from pathlib import Path
 from dotenv import dotenv_values, load_dotenv
 
 ENV_DEFAULTS: dict[str, str] = {
-    "INDEX_BUFFER_SIZE": "10000",
-    "INDEX_MAX_SEGMENTS_IN_MEMORY": "5",
-    "INDEX_FLUSH_INTERVAL": "30",
-    "LOG_LEVEL": "INFO",
+    "BM25_K1": "1.5",
+    "BM25_B": "0.75",
 }
 
 
 @dataclass(slots=True)
-class Settings:
-    """Validated settings used across the indexing service."""
+class BM25Settings:
+    """Validated BM25 retrieval settings."""
 
-    index_buffer_size: int
-    index_max_segments_in_memory: int
-    index_flush_interval: int
-    log_level: str
+    bm25_k1: float
+    bm25_b: float
     env_path: Path
     project_root: Path
 
@@ -40,26 +35,22 @@ def _ensure_env_file(env_path: Path) -> None:
             f.write("\n".join(missing_lines) + "\n")
 
 
-def _parse_positive_int(name: str, raw: str) -> int:
-    value = int(raw)
+def _parse_positive_float(name: str, raw: str) -> float:
+    value = float(raw)
     if value <= 0:
         raise ValueError(f"{name} must be greater than zero.")
     return value
 
 
-def load_settings() -> Settings:
+def load_settings() -> BM25Settings:
     project_root = Path(__file__).resolve().parents[3]
     env_path = project_root / ".env"
     _ensure_env_file(env_path)
     load_dotenv(dotenv_path=env_path, override=False)
 
-    settings = Settings(
-        index_buffer_size=_parse_positive_int("INDEX_BUFFER_SIZE", os.getenv("INDEX_BUFFER_SIZE", ENV_DEFAULTS["INDEX_BUFFER_SIZE"])),
-        index_max_segments_in_memory=_parse_positive_int("INDEX_MAX_SEGMENTS_IN_MEMORY", os.getenv("INDEX_MAX_SEGMENTS_IN_MEMORY", ENV_DEFAULTS["INDEX_MAX_SEGMENTS_IN_MEMORY"])),
-        index_flush_interval=_parse_positive_int("INDEX_FLUSH_INTERVAL", os.getenv("INDEX_FLUSH_INTERVAL", ENV_DEFAULTS["INDEX_FLUSH_INTERVAL"])),
-        log_level=os.getenv("LOG_LEVEL", ENV_DEFAULTS["LOG_LEVEL"]).upper(),
+    return BM25Settings(
+        bm25_k1=_parse_positive_float("BM25_K1", os.getenv("BM25_K1", ENV_DEFAULTS["BM25_K1"])),
+        bm25_b=_parse_positive_float("BM25_B", os.getenv("BM25_B", ENV_DEFAULTS["BM25_B"])),
         env_path=env_path,
         project_root=project_root,
     )
-    logging.getLogger(__name__).debug("settings_loaded env_path=%s", env_path)
-    return settings
