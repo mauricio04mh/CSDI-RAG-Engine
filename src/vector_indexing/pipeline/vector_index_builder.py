@@ -75,6 +75,16 @@ class VectorIndexBuilder:
 
         logger.info("vector_index_loaded vectors=%s", len(self.vector_store))
 
+    def flush(self) -> int:
+        """Flush any remaining buffered vectors to FAISS and the database.
+
+        Returns the number of documents that were flushed.
+        """
+        with self._lock:
+            count = len(self._buffer_doc_ids)
+            self._flush_locked(force=True)
+            return count
+
     def stop(self) -> None:
         with self._lock:
             self._flush_locked(force=True)

@@ -7,6 +7,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.bm25.api.bm25_routes import router as bm25_router
+from src.generation.api.routes import router as rag_router
+from src.generation.config.settings import load_settings as load_generation_settings
+from src.generation.llm_client import LLMClient
+from src.generation.rag_pipeline import RAGPipeline
 from src.bm25.config.settings import load_settings as load_bm25_settings
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.database.config import build_engine
@@ -37,6 +41,7 @@ def create_app() -> FastAPI:
     indexing_settings = load_indexing_settings()
     bm25_settings = load_bm25_settings()
     vector_settings = load_vector_settings()
+    generation_settings = load_generation_settings()
     configure_logging(indexing_settings.log_level)
 
     engine = build_engine(os.getenv("DATABASE_URL"))
@@ -62,6 +67,20 @@ def create_app() -> FastAPI:
         vector_index_builder=vector_index_builder,
         chunk_repo=chunk_repo,
     )
+    llm_client = LLMClient(
+        base_url=generation_settings.base_url,
+        api_key=generation_settings.api_key,
+        model=generation_settings.model,
+        max_tokens=generation_settings.max_tokens,
+        temperature=generation_settings.temperature,
+        timeout=generation_settings.timeout,
+    )
+    rag_pipeline = RAGPipeline(
+        retriever=hybrid_retriever,
+        chunk_repo=chunk_repo,
+        llm_client=llm_client,
+        settings=generation_settings,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -77,6 +96,7 @@ def create_app() -> FastAPI:
         app.state.source_repo = source_repo
         app.state.chunk_repo = chunk_repo
         app.state.ingestion_orchestrator = ingestion_orchestrator
+        app.state.rag_pipeline = rag_pipeline
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()
@@ -99,6 +119,7 @@ def create_app() -> FastAPI:
     app.include_router(vector_indexing_router)
     app.include_router(vector_search_router)
     app.include_router(ingestion_router)
+    app.include_router(rag_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:

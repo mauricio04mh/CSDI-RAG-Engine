@@ -6,11 +6,15 @@
     "allowed_domains": ["docs.python.org"],
     "seed_urls": [
       "https://docs.python.org/3/tutorial/",
-      "https://docs.python.org/3/library/"
+      "https://docs.python.org/3/library/",
+      "https://docs.python.org/3/howto/",
+      "https://docs.python.org/3/glossary.html"
     ],
     "allowed_path_prefixes": [
       "/3/tutorial/",
-      "/3/library/"
+      "/3/library/",
+      "/3/howto/",
+      "/3/glossary.html"
     ],
     "blocked_path_patterns": [
       "/search.html",
