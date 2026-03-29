@@ -13,3 +13,4 @@ sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 pgvector==0.3.6
 alembic==1.14.0
+snowballstemmer==2.2.0

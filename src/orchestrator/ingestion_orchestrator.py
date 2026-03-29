@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from src.bm25.text.tokenizer import tokenize
 from src.crawler.crawler import Crawler
 from src.database.repositories.chunk_repository import ChunkRepository
 from src.document_processing.chunker import Chunker, DocumentChunk
@@ -121,7 +122,7 @@ class IngestionOrchestrator:
         return report
 
     def _index_chunk(self, chunk: DocumentChunk) -> bool:
-        tokens = chunk.text.lower().split()
+        tokens = tokenize(chunk.text)
         try:
             self._index_builder.add_document(doc_id=chunk.chunk_id, tokens=tokens)
             self._vector_index_builder.add_document(doc_id=chunk.chunk_id, text=chunk.text)

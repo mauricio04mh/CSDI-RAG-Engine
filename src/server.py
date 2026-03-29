@@ -11,6 +11,7 @@ from src.generation.api.routes import router as rag_router
 from src.generation.config.settings import load_settings as load_generation_settings
 from src.generation.llm_client import LLMClient
 from src.generation.rag_pipeline import RAGPipeline
+from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 from src.bm25.config.settings import load_settings as load_bm25_settings
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.database.config import build_engine
@@ -75,11 +76,17 @@ def create_app() -> FastAPI:
         temperature=generation_settings.temperature,
         timeout=generation_settings.timeout,
     )
+    reranker = (
+        CrossEncoderReranker(model_name=generation_settings.reranker_model)
+        if generation_settings.reranker_enabled
+        else None
+    )
     rag_pipeline = RAGPipeline(
         retriever=hybrid_retriever,
         chunk_repo=chunk_repo,
         llm_client=llm_client,
         settings=generation_settings,
+        reranker=reranker,
     )
 
     @asynccontextmanager
