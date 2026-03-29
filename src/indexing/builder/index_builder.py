@@ -98,10 +98,7 @@ class IndexBuilder:
             return IndexedDocumentResult(doc_id=doc_id, buffered_documents=self.active_state.buffered_documents, flushed=False)
 
     def flush(self, force: bool = False) -> str | None:
-<<<<<<< HEAD
-=======
         """Flush the in-memory segment to the database if thresholds require it."""
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         with self._lock:
             segment = self._flush_locked(force=force)
             return segment.segment_id if segment else None
@@ -150,16 +147,12 @@ class IndexBuilder:
             candidates = self.segment_merge_policy.select_candidates(segment_ids)
             if not candidates:
                 break
-<<<<<<< HEAD
-            logger.info("segment_merge_started candidates=%s", ",".join(candidates))
-=======
 
             logger.info(
                 "segment_merge_started candidate_count=%s candidates=%s",
                 len(candidates),
                 ",".join(candidates),
             )
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
             result = self.segment_merger.merge(candidates)
             if result is None:
                 break

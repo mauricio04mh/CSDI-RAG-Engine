@@ -80,9 +80,20 @@ class IngestionOrchestrator:
                 content=doc.content,
             )
             chunks_produced += len(chunks)
-            self._chunk_repo.save_chunks(chunks)
 
-            for chunk in chunks:
+            existing_ids = self._chunk_repo.get_existing_chunk_ids([c.chunk_id for c in chunks])
+            new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
+
+            if not new_chunks:
+                logger.debug("page_all_chunks_exist url=%s skipping=%s", doc.url, len(chunks))
+                continue
+
+            if existing_ids:
+                logger.debug("page_partial_chunks_exist url=%s new=%s skipped=%s", doc.url, len(new_chunks), len(existing_ids))
+
+            self._chunk_repo.save_chunks(new_chunks)
+
+            for chunk in new_chunks:
                 indexed = self._index_chunk(chunk)
                 if indexed:
                     chunks_indexed += 1
@@ -110,9 +121,9 @@ class IngestionOrchestrator:
             self._index_builder.add_document(doc_id=chunk.chunk_id, tokens=tokens)
             self._vector_index_builder.add_document(doc_id=chunk.chunk_id, text=chunk.text)
             return True
-        except ValueError:
-            # chunk_id already indexed — skip duplicate
-            logger.debug("chunk_duplicate chunk_id=%s", chunk.chunk_id)
+        except ValueError as exc:
+            # Should not happen after pre-filtering — signals index/DB inconsistency
+            logger.warning("chunk_index_conflict chunk_id=%s reason=%s", chunk.chunk_id, exc)
             return False
         except Exception:
             logger.exception("chunk_index_failed chunk_id=%s", chunk.chunk_id)

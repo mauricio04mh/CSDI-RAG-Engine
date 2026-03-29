@@ -7,13 +7,9 @@ from pathlib import Path
 from dotenv import dotenv_values, load_dotenv
 
 ENV_DEFAULTS: dict[str, str] = {
-<<<<<<< HEAD
-    "BM25_K1": "1.5",
-=======
     # BM25 term saturation parameter.
     "BM25_K1": "1.5",
     # BM25 document length normalization parameter.
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     "BM25_B": "0.75",
 }
 
@@ -29,22 +25,6 @@ class BM25Settings:
 
 
 def _ensure_env_file(env_path: Path) -> None:
-<<<<<<< HEAD
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    if not env_path.exists():
-        env_path.write_text("", encoding="utf-8")
-    current_values = dotenv_values(env_path)
-    missing_lines = [f"{k}={v}" for k, v in ENV_DEFAULTS.items() if current_values.get(k) is None]
-    if missing_lines:
-        with env_path.open("a", encoding="utf-8") as f:
-            if env_path.stat().st_size > 0:
-                f.write("\n")
-            f.write("\n".join(missing_lines) + "\n")
-
-
-def _parse_positive_float(name: str, raw: str) -> float:
-    value = float(raw)
-=======
     """Create the project `.env` file and backfill missing BM25 keys."""
     env_path.parent.mkdir(parents=True, exist_ok=True)
     if not env_path.exists():
@@ -63,17 +43,13 @@ def _parse_positive_float(name: str, raw: str) -> float:
 def _parse_positive_float(name: str, raw_value: str) -> float:
     """Parse a strictly positive float setting."""
     value = float(raw_value)
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     if value <= 0:
         raise ValueError(f"{name} must be greater than zero.")
     return value
 
 
 def load_settings() -> BM25Settings:
-<<<<<<< HEAD
-=======
     """Load and validate BM25 retrieval settings from the root `.env` file."""
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     project_root = Path(__file__).resolve().parents[3]
     env_path = project_root / ".env"
     _ensure_env_file(env_path)

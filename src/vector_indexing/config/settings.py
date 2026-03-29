@@ -13,10 +13,7 @@ ENV_DEFAULTS: dict[str, str] = {
     "HNSW_M": "32",
     "HNSW_EF_CONSTRUCTION": "200",
     "HNSW_EF_SEARCH": "50",
-<<<<<<< HEAD
-=======
     # Number of documents buffered before vectors are inserted into FAISS.
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
     "VECTOR_BATCH_SIZE": "128",
     "LOG_LEVEL": "INFO",
 }
@@ -69,11 +66,6 @@ def load_settings() -> VectorSettings:
         vector_dimension=_parse_positive_int("VECTOR_DIMENSION", os.getenv("VECTOR_DIMENSION", ENV_DEFAULTS["VECTOR_DIMENSION"])),
         faiss_index_type=os.getenv("FAISS_INDEX_TYPE", ENV_DEFAULTS["FAISS_INDEX_TYPE"]).upper(),
         hnsw_m=_parse_positive_int("HNSW_M", os.getenv("HNSW_M", ENV_DEFAULTS["HNSW_M"])),
-<<<<<<< HEAD
-        hnsw_ef_construction=_parse_positive_int("HNSW_EF_CONSTRUCTION", os.getenv("HNSW_EF_CONSTRUCTION", ENV_DEFAULTS["HNSW_EF_CONSTRUCTION"])),
-        hnsw_ef_search=_parse_positive_int("HNSW_EF_SEARCH", os.getenv("HNSW_EF_SEARCH", ENV_DEFAULTS["HNSW_EF_SEARCH"])),
-        vector_batch_size=_parse_positive_int("VECTOR_BATCH_SIZE", os.getenv("VECTOR_BATCH_SIZE", ENV_DEFAULTS["VECTOR_BATCH_SIZE"])),
-=======
         hnsw_ef_construction=_parse_positive_int(
             "HNSW_EF_CONSTRUCTION",
             os.getenv("HNSW_EF_CONSTRUCTION", ENV_DEFAULTS["HNSW_EF_CONSTRUCTION"]),
@@ -86,7 +78,6 @@ def load_settings() -> VectorSettings:
             "VECTOR_BATCH_SIZE",
             os.getenv("VECTOR_BATCH_SIZE", ENV_DEFAULTS["VECTOR_BATCH_SIZE"]),
         ),
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         log_level=os.getenv("LOG_LEVEL", ENV_DEFAULTS["LOG_LEVEL"]).upper(),
         env_path=env_path,
         project_root=project_root,
