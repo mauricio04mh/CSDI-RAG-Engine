@@ -16,7 +16,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: uvicorn src.api.server:app --host 0.0.0.0 --port 8888 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8888 --reload
 
   postgres:
     image: pgvector/pgvector:pg17

@@ -98,6 +98,11 @@ class IngestionOrchestrator:
                 if indexed:
                     chunks_indexed += 1
 
+        # Flush any vectors remaining in the batch buffer (last partial batch)
+        flushed = self._vector_index_builder.flush()
+        if flushed:
+            logger.debug("vector_buffer_flushed count=%s", flushed)
+
         report = IngestionReport(
             source_id=source_id,
             pages_crawled=crawl_result.total,

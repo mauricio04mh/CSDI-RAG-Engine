@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,12 @@ def ingest_source(payload: IngestSourceRequest, request: Request) -> IngestRespo
     except Exception as exc:
         logger.exception("ingestion_failed source=%s", payload.source_id)
         raise HTTPException(status_code=500, detail="Ingestion failed.") from exc
+
+    # Reload BM25 in-memory index so new segments are visible to search immediately
+    if report.chunks_indexed > 0:
+        bm25_retriever: BM25Retriever = request.app.state.bm25_retriever
+        bm25_retriever.reload()
+        logger.info("bm25_reloaded after_ingest source=%s new_chunks=%s", payload.source_id, report.chunks_indexed)
 
     return IngestResponse(
         source_id=report.source_id,
