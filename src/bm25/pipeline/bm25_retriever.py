@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -12,10 +11,10 @@ from src.bm25.config.settings import BM25Settings
 from src.bm25.scoring.bm25_scorer import BM25Scorer
 from src.bm25.structures.bm25_index import BM25Index
 from src.bm25.structures.postings_list import PostingsList
+from src.bm25.text.tokenizer import tokenize
 from src.database.repositories.bm25_repository import BM25Repository
 
 logger = logging.getLogger(__name__)
-TOKEN_PATTERN = re.compile(r"\w+")
 
 
 @dataclass(slots=True)
@@ -94,5 +93,5 @@ class BM25Retriever:
             return ranked_results[:top_k]
 
     def _tokenize(self, query: str) -> list[str]:
-        """Tokenize the query into lowercase lexical terms."""
-        return [token.lower() for token in TOKEN_PATTERN.findall(query)]
+        """Tokenize and stem the query using the shared BM25 tokenizer."""
+        return tokenize(query)

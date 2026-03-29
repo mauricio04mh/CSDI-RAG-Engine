@@ -8,6 +8,7 @@ from src.generation.config.settings import GenerationSettings
 from src.generation.llm_client import LLMClient
 from src.generation.prompt_builder import build_messages
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
+from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,10 @@ class RAGResult:
 class RAGPipeline:
     """Retrieval-Augmented Generation pipeline.
 
-    1. Retrieves the top-k most relevant chunks via hybrid search.
-    2. Builds a prompt with the retrieved context.
-    3. Calls the LLM to generate an answer.
+    1. Retrieves candidate chunks via hybrid search (BM25 + vector).
+    2. Optionally re-ranks candidates with a cross-encoder for precision.
+    3. Builds a prompt with the top-k chunks.
+    4. Calls the LLM to generate an answer.
     """
 
     def __init__(
@@ -43,26 +45,49 @@ class RAGPipeline:
         chunk_repo: ChunkRepository,
         llm_client: LLMClient,
         settings: GenerationSettings,
+        reranker: CrossEncoderReranker | None = None,
     ) -> None:
         self._retriever = retriever
         self._chunk_repo = chunk_repo
         self._llm_client = llm_client
         self._settings = settings
+        self._reranker = reranker
 
     def query(self, question: str) -> RAGResult:
-        # 1. Retrieve relevant chunks
-        hits = self._retriever.search(
-            query=question, top_k=self._settings.context_chunks
+        # 1. First-stage: retrieve candidate chunks
+        candidate_k = (
+            self._settings.reranker_candidate_k
+            if self._reranker
+            else self._settings.context_chunks
         )
+        hits = self._retriever.search(query=question, top_k=candidate_k)
         chunk_ids = [h.doc_id for h in hits]
         chunks_map = self._chunk_repo.get_chunks(chunk_ids)
-        chunks = [chunks_map[cid] for cid in chunk_ids if cid in chunks_map]
 
         logger.info(
-            "rag_retrieval query=%s chunks_retrieved=%s", question, len(chunks)
+            "rag_retrieval query=%s candidates=%s", question, len(chunk_ids)
         )
 
-        # 2. Build prompt and call LLM
+        # 2. Second-stage: re-rank with cross-encoder if available
+        if self._reranker:
+            candidates = [
+                (cid, chunks_map[cid].text)
+                for cid in chunk_ids
+                if cid in chunks_map
+            ]
+            reranked = self._reranker.rerank(
+                query=question,
+                candidates=candidates,
+                top_k=self._settings.context_chunks,
+            )
+            final_ids = [r.doc_id for r in reranked]
+            logger.info("rag_reranked top_k=%s", len(final_ids))
+        else:
+            final_ids = chunk_ids[: self._settings.context_chunks]
+
+        chunks = [chunks_map[cid] for cid in final_ids if cid in chunks_map]
+
+        # 3. Build prompt and call LLM
         messages = build_messages(question, chunks)
         response = self._llm_client.chat(messages)
 
