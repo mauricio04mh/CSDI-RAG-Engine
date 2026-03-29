@@ -39,6 +39,16 @@ class ChunkRepository:
             session.execute(stmt)
         logger.info("chunks_saved count=%s", len(rows))
 
+    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
+        """Return the subset of chunk_ids that already exist in the database."""
+        if not chunk_ids:
+            return set()
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(Chunk.chunk_id).where(Chunk.chunk_id.in_(chunk_ids))
+            ).all()
+        return {row.chunk_id for row in rows}
+
     def get_chunk(self, chunk_id: str) -> Chunk | None:
         with Session(self.engine) as session:
             return session.execute(

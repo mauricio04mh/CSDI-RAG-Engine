@@ -20,11 +20,7 @@ class PostingsList:
 
     @classmethod
     def from_serialized(cls, payload: list[dict[str, int | str]]) -> "PostingsList":
-<<<<<<< HEAD
         """Create a postings list from deserialized dictionaries."""
-=======
-        """Create a postings list from msgpack-deserialized dictionaries."""
->>>>>>> 0869b5537c8feab5210ece8b099d72c680234530
         return cls(Posting(doc_id=str(item["doc_id"]), tf=int(item["tf"])) for item in payload)
 
     def __iter__(self) -> Iterator[Posting]:
