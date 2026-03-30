@@ -72,3 +72,11 @@ class LLMClient:
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
         )
+
+    def update_settings(self, model: str, temperature: float) -> None:
+        """Hot-update model and temperature without restarting."""
+        self._model = model
+        self._temperature = temperature
+        logger.info(
+            "llm_settings_updated model=%s temperature=%.2f", model, temperature
+        )

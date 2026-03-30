@@ -30,10 +30,14 @@ class HybridRetriever:
         bm25_retriever: BM25Retriever,
         vector_retriever: VectorRetriever,
         fetch_k: int = 50,
+        bm25_weight: float = 0.3,
+        vector_weight: float = 0.7,
     ) -> None:
         self._bm25 = bm25_retriever
         self._vector = vector_retriever
         self.fetch_k = fetch_k
+        self._bm25_weight = bm25_weight
+        self._vector_weight = vector_weight
 
     def search(self, query: str, top_k: int) -> list[HybridResult]:
         if not query.strip():
@@ -48,13 +52,28 @@ class HybridRetriever:
         bm25_ids = [r.doc_id for r in bm25_results]
         vector_ids = [r.doc_id for r in vector_results]
 
-        fused = reciprocal_rank_fusion([bm25_ids, vector_ids])
+        fused = reciprocal_rank_fusion(
+            [bm25_ids, vector_ids],
+            weights=[self._bm25_weight, self._vector_weight],
+        )
 
         logger.info(
-            "hybrid_search_completed bm25_hits=%s vector_hits=%s fused=%s",
+            "hybrid_search_completed bm25_hits=%s vector_hits=%s fused=%s bm25_w=%.2f vector_w=%.2f",
             len(bm25_ids),
             len(vector_ids),
             len(fused),
+            self._bm25_weight,
+            self._vector_weight,
         )
 
         return [HybridResult(doc_id=doc_id, score=score) for doc_id, score in fused[:top_k]]
+
+    def update_weights(self, bm25_weight: float, vector_weight: float) -> None:
+        """Hot-update the RRF fusion weights without restarting."""
+        self._bm25_weight = bm25_weight
+        self._vector_weight = vector_weight
+        logger.info(
+            "hybrid_weights_updated bm25_weight=%.2f vector_weight=%.2f",
+            bm25_weight,
+            vector_weight,
+        )

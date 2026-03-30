@@ -3,11 +3,12 @@ from __future__ import annotations
 from src.document_processing.chunker import DocumentChunk
 
 _SYSTEM_PROMPT = (
-    "You are a helpful programming assistant. "
-    "Answer the user's question based ONLY on the provided documentation context. "
-    "If the context does not contain enough information to answer, say so clearly. "
-    "Do not make up information. Be concise and precise. "
-    "When showing code examples, use markdown code blocks."
+    "Eres un asistente experto en programación. "
+    "Responde SIEMPRE en español, sin excepción, independientemente del idioma de la pregunta. "
+    "Responde la pregunta del usuario basándote ÚNICAMENTE en el contexto de documentación proporcionado. "
+    "Si el contexto no contiene suficiente información para responder, indícalo claramente. "
+    "No inventes información. Sé conciso y preciso. "
+    "Al mostrar ejemplos de código, usa bloques de código markdown."
 )
 
 
@@ -21,7 +22,7 @@ def build_messages(query: str, chunks: list[DocumentChunk]) -> list[dict]:
 
     context = "\n\n---\n\n".join(context_parts)
 
-    user_content = f"Context from documentation:\n\n{context}\n\n---\n\nQuestion: {query}"
+    user_content = f"Contexto de la documentación:\n\n{context}\n\n---\n\nPregunta: {query}"
 
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},

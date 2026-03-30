@@ -5,12 +5,17 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.bm25.api.bm25_routes import router as bm25_router
+from src.config_api.api.routes import load_config_from_disk
+from src.config_api.api.routes import router as config_router
+from src.file_upload.api.routes import router as upload_router
 from src.generation.api.routes import router as rag_router
 from src.generation.config.settings import load_settings as load_generation_settings
 from src.generation.llm_client import LLMClient
 from src.generation.rag_pipeline import RAGPipeline
+from src.metrics.api.routes import router as metrics_router
 from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 from src.bm25.config.settings import load_settings as load_bm25_settings
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
@@ -59,6 +64,8 @@ def create_app() -> FastAPI:
     hybrid_retriever = HybridRetriever(
         bm25_retriever=bm25_retriever,
         vector_retriever=vector_retriever,
+        bm25_weight=float(os.getenv("HYBRID_BM25_WEIGHT", "0.3")),
+        vector_weight=float(os.getenv("HYBRID_VECTOR_WEIGHT", "0.7")),
     )
     source_repo = SourceConfigRepository()
     chunk_repo = ChunkRepository(engine)
@@ -89,6 +96,26 @@ def create_app() -> FastAPI:
         reranker=reranker,
     )
 
+    # Apply any persisted config overrides on top of env-var defaults
+    _persisted_config = load_config_from_disk()
+    if "bm25_weight" in _persisted_config and "vector_weight" in _persisted_config:
+        hybrid_retriever.update_weights(
+            _persisted_config["bm25_weight"],
+            _persisted_config["vector_weight"],
+        )
+    if "model" in _persisted_config or "temperature" in _persisted_config:
+        llm_client.update_settings(
+            model=_persisted_config.get("model", generation_settings.model),
+            temperature=_persisted_config.get("temperature", generation_settings.temperature),
+        )
+    if "reranker_enabled" in _persisted_config:
+        persisted_reranker_on = _persisted_config["reranker_enabled"]
+        if persisted_reranker_on and reranker is None:
+            reranker = CrossEncoderReranker(model_name=generation_settings.reranker_model)
+            rag_pipeline._reranker = reranker
+        elif not persisted_reranker_on and reranker is not None:
+            rag_pipeline._reranker = None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.db_engine = engine
@@ -104,6 +131,8 @@ def create_app() -> FastAPI:
         app.state.chunk_repo = chunk_repo
         app.state.ingestion_orchestrator = ingestion_orchestrator
         app.state.rag_pipeline = rag_pipeline
+        app.state.llm_client = llm_client
+        app.state.reranker_model = generation_settings.reranker_model
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()
@@ -120,6 +149,12 @@ def create_app() -> FastAPI:
         description="Technical documentation search engine API with hybrid retrieval and RAG.",
         lifespan=lifespan,
     )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(search_router)
     app.include_router(bm25_router)
     app.include_router(indexing_router)
@@ -127,6 +162,9 @@ def create_app() -> FastAPI:
     app.include_router(vector_search_router)
     app.include_router(ingestion_router)
     app.include_router(rag_router)
+    app.include_router(metrics_router)
+    app.include_router(config_router)
+    app.include_router(upload_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:

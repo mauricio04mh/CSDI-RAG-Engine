@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -64,3 +64,10 @@ class ChunkRepository:
                 select(Chunk).where(Chunk.chunk_id.in_(chunk_ids))
             ).scalars().all()
         return {row.chunk_id: row for row in rows}
+
+    def count_chunks(self) -> int:
+        """Return the total number of chunks stored in the database."""
+        with Session(self.engine) as session:
+            return session.execute(
+                select(func.count()).select_from(Chunk)
+            ).scalar_one()

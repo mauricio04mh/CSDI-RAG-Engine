@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
+from src.database.repositories.chunk_repository import ChunkRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["bm25"])
@@ -23,6 +24,11 @@ class BM25SearchResultItem(BaseModel):
 
     doc_id: str
     score: float
+    source_id: str
+    url: str
+    title: str
+    breadcrumb: str
+    text: str
 
 
 class BM25SearchResponse(BaseModel):
@@ -35,12 +41,32 @@ class BM25SearchResponse(BaseModel):
 def search_bm25(payload: BM25SearchRequest, request: Request) -> BM25SearchResponse:
     """Run BM25 lexical retrieval against the persisted inverted index."""
     retriever: BM25Retriever = request.app.state.bm25_retriever
+    chunk_repo: ChunkRepository = request.app.state.chunk_repo
     try:
         results = retriever.search(query=payload.query, top_k=payload.top_k)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive API guard
+    except Exception as exc:
         logger.exception("bm25_search_failed query=%s", payload.query)
         raise HTTPException(status_code=500, detail="BM25 search failed.") from exc
 
-    return BM25SearchResponse(results=[BM25SearchResultItem(doc_id=result.doc_id, score=result.score) for result in results])
+    doc_ids = [r.doc_id for r in results]
+    chunks = chunk_repo.get_chunks(doc_ids)
+    score_map = {r.doc_id: r.score for r in results}
+
+    enriched: list[BM25SearchResultItem] = []
+    for doc_id in doc_ids:
+        chunk = chunks.get(doc_id)
+        if chunk is None:
+            continue
+        enriched.append(BM25SearchResultItem(
+            doc_id=doc_id,
+            score=score_map[doc_id],
+            source_id=chunk.source_id,
+            url=chunk.url,
+            title=chunk.title,
+            breadcrumb=chunk.breadcrumb,
+            text=chunk.text,
+        ))
+
+    return BM25SearchResponse(results=enriched)
