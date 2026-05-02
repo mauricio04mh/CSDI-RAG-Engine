@@ -7,11 +7,8 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from src.bm25.text.tokenizer import tokenize
-from src.database.repositories.chunk_repository import ChunkRepository
 from src.document_processing.chunker import Chunker
-from src.indexing.builder.index_builder import IndexBuilder
-from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
+from src.ingestion.chunk_ingestion_service import ChunkIngestionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["upload"])
@@ -80,9 +77,7 @@ async def upload_file(
     if not text.strip():
         raise HTTPException(status_code=422, detail="No extractable text found in file.")
 
-    chunk_repo: ChunkRepository = request.app.state.chunk_repo
-    index_builder: IndexBuilder = request.app.state.index_builder
-    vector_index_builder: VectorIndexBuilder = request.app.state.vector_index_builder
+    chunk_ingestion: ChunkIngestionService = request.app.state.chunk_ingestion_service
 
     chunker = Chunker()
     chunks = chunker.chunk(
@@ -97,28 +92,11 @@ async def upload_file(
     if not chunks:
         raise HTTPException(status_code=422, detail="File produced no chunks after processing.")
 
-    existing_ids = chunk_repo.get_existing_chunk_ids([c.chunk_id for c in chunks])
-    new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
-
-    chunks_indexed = 0
-    if new_chunks:
-        chunk_repo.save_chunks(new_chunks)
-        for chunk in new_chunks:
-            tokens = tokenize(chunk.text)
-            try:
-                index_builder.add_document(doc_id=chunk.chunk_id, tokens=tokens)
-                vector_index_builder.add_document(doc_id=chunk.chunk_id, text=chunk.text)
-                chunks_indexed += 1
-            except ValueError as exc:
-                logger.warning(
-                    "upload_chunk_index_conflict chunk_id=%s reason=%s", chunk.chunk_id, exc
-                )
-            except Exception:
-                logger.exception("upload_chunk_index_failed chunk_id=%s", chunk.chunk_id)
-
-        flushed = vector_index_builder.flush()
-        if flushed:
-            logger.debug("upload_vector_buffer_flushed count=%s", flushed)
+    ingestion_result = chunk_ingestion.ingest_chunks(chunks)
+    chunks_indexed = ingestion_result.indexed_chunks
+    finalize_result = chunk_ingestion.finalize(reload_bm25=True)
+    if finalize_result.vector_flushed:
+        logger.debug("upload_vector_buffer_flushed count=%s", finalize_result.vector_flushed)
 
     logger.info(
         "upload_complete source_id=%s filename=%s produced=%s indexed=%s",

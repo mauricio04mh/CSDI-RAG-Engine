@@ -18,6 +18,7 @@ from testcontainers.postgres import PostgresContainer
 from src.database.models.bm25_models import Base as BM25Base
 from src.database.models.chunk_models import Base as ChunkBase
 from src.database.models.vector_models import Base as VectorBase
+from src.database.models.web_search_models import Base as WebSearchBase
 
 _POSTGRES_IMAGE = "pgvector/pgvector:pg17"
 _TRUNCATE_TABLES = """
@@ -28,7 +29,9 @@ _TRUNCATE_TABLES = """
         bm25_terms,
         bm25_segments,
         vector_documents,
-        vector_index_metadata
+        vector_index_metadata,
+        web_search_hits,
+        web_search_runs
     RESTART IDENTITY CASCADE
 """
 
@@ -53,6 +56,7 @@ def engine(pg_container: PostgresContainer) -> Engine:
     ChunkBase.metadata.create_all(eng)
     BM25Base.metadata.create_all(eng)
     VectorBase.metadata.create_all(eng)
+    WebSearchBase.metadata.create_all(eng)
 
     yield eng
     eng.dispose()

@@ -21,8 +21,10 @@ from src.bm25.config.settings import load_settings as load_bm25_settings
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.database.config import build_engine
 from src.database.repositories.chunk_repository import ChunkRepository
+from src.database.repositories.web_search_repository import WebSearchRepository
 from src.hybrid.api.routes import router as search_router
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
+from src.ingestion.chunk_ingestion_service import ChunkIngestionService
 from src.indexing.api.routes import router as indexing_router
 from src.indexing.builder.index_builder import IndexBuilder
 from src.indexing.config.settings import load_settings as load_indexing_settings
@@ -34,6 +36,13 @@ from src.vector_indexing.config.settings import load_settings as load_vector_set
 from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
 from src.vector_retrieval.api.vector_search_routes import router as vector_search_router
 from src.vector_retrieval.pipeline.vector_retriever import VectorRetriever
+from src.web_search.fetchers.http_fetcher import HttpDocumentFetcher
+from src.web_search.orchestrator import WebSearchOrchestrator, WebSearchSettings
+from src.web_search.providers.duckduckgo_provider import DuckDuckGoSearchProvider
+from src.web_search.insufficiency_detector import (
+    InsufficiencyDetector,
+    load_settings as load_insufficiency_settings,
+)
 
 
 def configure_logging(log_level: str) -> None:
@@ -48,6 +57,7 @@ def create_app() -> FastAPI:
     bm25_settings = load_bm25_settings()
     vector_settings = load_vector_settings()
     generation_settings = load_generation_settings()
+    insufficiency_settings = load_insufficiency_settings()
     configure_logging(indexing_settings.log_level)
 
     engine = build_engine(os.getenv("DATABASE_URL"))
@@ -69,11 +79,15 @@ def create_app() -> FastAPI:
     )
     source_repo = SourceConfigRepository()
     chunk_repo = ChunkRepository(engine)
-    ingestion_orchestrator = IngestionOrchestrator(
-        source_repo=source_repo,
+    chunk_ingestion_service = ChunkIngestionService(
+        chunk_repo=chunk_repo,
         index_builder=index_builder,
         vector_index_builder=vector_index_builder,
-        chunk_repo=chunk_repo,
+        bm25_retriever=bm25_retriever,
+    )
+    ingestion_orchestrator = IngestionOrchestrator(
+        source_repo=source_repo,
+        chunk_ingestion=chunk_ingestion_service,
     )
     llm_client = LLMClient(
         base_url=generation_settings.base_url,
@@ -88,12 +102,26 @@ def create_app() -> FastAPI:
         if generation_settings.reranker_enabled
         else None
     )
+    insufficiency_detector = InsufficiencyDetector(settings=insufficiency_settings)
+    web_search_settings = WebSearchSettings(
+        enabled=os.getenv("WEB_SEARCH_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"},
+        top_k=int(os.getenv("WEB_SEARCH_TOP_K", "5")),
+    )
+    web_search_orchestrator = WebSearchOrchestrator(
+        provider=DuckDuckGoSearchProvider(),
+        settings=web_search_settings,
+        fetcher=HttpDocumentFetcher(),
+        chunk_ingestion=chunk_ingestion_service,
+        web_search_repo=WebSearchRepository(engine),
+    )
     rag_pipeline = RAGPipeline(
         retriever=hybrid_retriever,
         chunk_repo=chunk_repo,
         llm_client=llm_client,
         settings=generation_settings,
         reranker=reranker,
+        insufficiency_detector=insufficiency_detector,
+        web_search_orchestrator=web_search_orchestrator,
     )
 
     # Apply any persisted config overrides on top of env-var defaults
@@ -129,6 +157,7 @@ def create_app() -> FastAPI:
         app.state.hybrid_retriever = hybrid_retriever
         app.state.source_repo = source_repo
         app.state.chunk_repo = chunk_repo
+        app.state.chunk_ingestion_service = chunk_ingestion_service
         app.state.ingestion_orchestrator = ingestion_orchestrator
         app.state.rag_pipeline = rag_pipeline
         app.state.llm_client = llm_client
