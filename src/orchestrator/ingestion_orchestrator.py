@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from src.bm25.text.tokenizer import tokenize
 from src.crawler.crawler import Crawler
-from src.database.repositories.chunk_repository import ChunkRepository
-from src.document_processing.chunker import Chunker, DocumentChunk
-from src.indexing.builder.index_builder import IndexBuilder
+from src.document_processing.chunker import Chunker
+from src.ingestion.chunk_ingestion_service import ChunkIngestionService
 from src.scraper.scraper import Scraper
 from src.sources_config.source_config_repository import SourceConfigRepository
-from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +30,13 @@ class IngestionOrchestrator:
     def __init__(
         self,
         source_repo: SourceConfigRepository,
-        index_builder: IndexBuilder,
-        vector_index_builder: VectorIndexBuilder,
-        chunk_repo: ChunkRepository,
+        chunk_ingestion: ChunkIngestionService,
         chunk_size: int = 256,
         chunk_overlap: int = 32,
         crawler_timeout: float = 15.0,
     ) -> None:
         self._source_repo = source_repo
-        self._index_builder = index_builder
-        self._vector_index_builder = vector_index_builder
-        self._chunk_repo = chunk_repo
+        self._chunk_ingestion = chunk_ingestion
         self._crawler = Crawler(timeout=crawler_timeout)
         self._scraper = Scraper()
         self._chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -81,26 +74,20 @@ class IngestionOrchestrator:
                 content=doc.content,
             )
             chunks_produced += len(chunks)
-
-            existing_ids = self._chunk_repo.get_existing_chunk_ids([c.chunk_id for c in chunks])
-            new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
-
-            if not new_chunks:
+            ingestion_result = self._chunk_ingestion.ingest_chunks(chunks)
+            chunks_indexed += ingestion_result.indexed_chunks
+            if ingestion_result.new_chunks == 0:
                 logger.debug("page_all_chunks_exist url=%s skipping=%s", doc.url, len(chunks))
-                continue
-
-            if existing_ids:
-                logger.debug("page_partial_chunks_exist url=%s new=%s skipped=%s", doc.url, len(new_chunks), len(existing_ids))
-
-            self._chunk_repo.save_chunks(new_chunks)
-
-            for chunk in new_chunks:
-                indexed = self._index_chunk(chunk)
-                if indexed:
-                    chunks_indexed += 1
+            elif ingestion_result.skipped_existing > 0:
+                logger.debug(
+                    "page_partial_chunks_exist url=%s new=%s skipped=%s",
+                    doc.url,
+                    ingestion_result.new_chunks,
+                    ingestion_result.skipped_existing,
+                )
 
         # Flush any vectors remaining in the batch buffer (last partial batch)
-        flushed = self._vector_index_builder.flush()
+        flushed = self._chunk_ingestion.finalize(reload_bm25=False).vector_flushed
         if flushed:
             logger.debug("vector_buffer_flushed count=%s", flushed)
 
@@ -120,17 +107,3 @@ class IngestionOrchestrator:
             report.chunks_indexed,
         )
         return report
-
-    def _index_chunk(self, chunk: DocumentChunk) -> bool:
-        tokens = tokenize(chunk.text)
-        try:
-            self._index_builder.add_document(doc_id=chunk.chunk_id, tokens=tokens)
-            self._vector_index_builder.add_document(doc_id=chunk.chunk_id, text=chunk.text)
-            return True
-        except ValueError as exc:
-            # Should not happen after pre-filtering — signals index/DB inconsistency
-            logger.warning("chunk_index_conflict chunk_id=%s reason=%s", chunk.chunk_id, exc)
-            return False
-        except Exception:
-            logger.exception("chunk_index_failed chunk_id=%s", chunk.chunk_id)
-            return False
