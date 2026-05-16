@@ -15,6 +15,10 @@ router = APIRouter(prefix="/api/v1", tags=["search"])
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Programming question or search query.")
     top_k: int = Field(default=10, ge=1, le=50, description="Maximum number of results.")
+    source_ids: list[str] | None = Field(
+        default=None,
+        description="If set, only return chunks from these source IDs. Result count may be less than top_k.",
+    )
 
 
 class SearchResultItem(BaseModel):
@@ -49,6 +53,16 @@ def search(payload: SearchRequest, request: Request) -> SearchResponse:
     chunk_ids = [h.doc_id for h in hits]
     chunks = chunk_repo.get_chunks(chunk_ids)
     score_map = {h.doc_id: h.score for h in hits}
+    missing_chunks = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunks]
+    logger.info(
+        "hybrid_search_trace query=%s requested_top_k=%s retrieved_hits=%s resolved_chunks=%s missing_chunks=%s top_ids=%s",
+        payload.query,
+        payload.top_k,
+        len(chunk_ids),
+        len(chunks),
+        len(missing_chunks),
+        chunk_ids[:10],
+    )
 
     results: list[SearchResultItem] = []
     for chunk_id in chunk_ids:
@@ -64,5 +78,9 @@ def search(payload: SearchRequest, request: Request) -> SearchResponse:
             breadcrumb=chunk.breadcrumb,
             text=chunk.text,
         ))
+
+    if payload.source_ids is not None:
+        sid_set = set(payload.source_ids)
+        results = [item for item in results if item.source_id in sid_set]
 
     return SearchResponse(query=payload.query, results=results)
