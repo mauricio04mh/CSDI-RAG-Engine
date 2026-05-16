@@ -17,3 +17,4 @@ snowballstemmer==2.2.0
 python-multipart==0.0.20
 pypdf==5.4.0
 python-docx==1.1.2
+redis==5.2.1
