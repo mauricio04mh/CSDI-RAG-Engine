@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - Python < 3.11
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Compatibility shim for Python versions without enum.StrEnum."""
 
 
 class InsufficiencyReason(StrEnum):
@@ -11,4 +17,3 @@ class InsufficiencyReason(StrEnum):
     LOW_SOURCE_DIVERSITY = "low_source_diversity"
     LOW_ANSWERABILITY = "low_answerability"
     LOW_CONFIDENCE = "low_confidence"
-
