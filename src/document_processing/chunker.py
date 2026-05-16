@@ -4,6 +4,9 @@ import re
 from dataclasses import dataclass
 
 _WHITESPACE = re.compile(r"\s+")
+# Split after sentence-ending punctuation followed by whitespace.
+# Handles "Hello world. Next sentence" and "End! New" and "Done? Yes".
+_SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+')
 
 
 @dataclass(slots=True)
@@ -18,8 +21,31 @@ class DocumentChunk:
     text: str           # cleaned, ready to embed or tokenize
 
 
+def _make_chunk(
+    source_id: str,
+    url_hash: str,
+    url: str,
+    title: str,
+    breadcrumb: str,
+    words: list[str],
+    index: int,
+) -> DocumentChunk:
+    return DocumentChunk(
+        chunk_id=f"{source_id}:{url_hash}:{index}",
+        source_id=source_id,
+        url=url,
+        title=title,
+        breadcrumb=breadcrumb,
+        text=" ".join(words),
+    )
+
+
 class Chunker:
-    """Splits a scraped document into fixed-size overlapping text chunks.
+    """Splits a scraped document into overlapping chunks that respect sentence boundaries.
+
+    Sentences are accumulated until the word count reaches chunk_size, then a chunk
+    is emitted. The last chunk_overlap words carry over as a seed for the next chunk.
+    For sentences longer than chunk_size, falls back to word-level splitting.
 
     Args:
         chunk_size:    Target number of words per chunk.
@@ -41,31 +67,46 @@ class Chunker:
         content: str,
     ) -> list[DocumentChunk]:
         cleaned = self._clean(content)
-        words = cleaned.split()
-
-        if not words:
+        if not cleaned:
             return []
 
         url_hash = _url_to_hash(url)
+        sentences = [s for s in _SENTENCE_SPLIT.split(cleaned) if s.strip()]
+        if not sentences:
+            return []
+
         chunks: list[DocumentChunk] = []
-        step = self.chunk_size - self.chunk_overlap
+        current_words: list[str] = []
         index = 0
 
-        for start in range(0, len(words), step):
-            window = words[start : start + self.chunk_size]
-            if not window:
-                break
-            chunks.append(
-                DocumentChunk(
-                    chunk_id=f"{source_id}:{url_hash}:{index}",
-                    source_id=source_id,
-                    url=url,
-                    title=title,
-                    breadcrumb=breadcrumb,
-                    text=" ".join(window),
-                )
-            )
-            index += 1
+        for sentence in sentences:
+            s_words = sentence.split()
+
+            # Edge case: single sentence exceeds chunk_size — word-level fallback.
+            if len(s_words) > self.chunk_size:
+                if current_words:
+                    chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
+                    index += 1
+
+                step = self.chunk_size - self.chunk_overlap
+                for start in range(0, len(s_words), step):
+                    window = s_words[start : start + self.chunk_size]
+                    if window:
+                        chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, window, index))
+                        index += 1
+                current_words = []
+                continue
+
+            # Flush and carry overlap when adding this sentence would overflow.
+            if current_words and len(current_words) + len(s_words) > self.chunk_size:
+                chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
+                index += 1
+                current_words = current_words[-self.chunk_overlap:] if self.chunk_overlap else []
+
+            current_words.extend(s_words)
+
+        if current_words:
+            chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
 
         return chunks
 

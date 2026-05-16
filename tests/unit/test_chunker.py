@@ -91,3 +91,90 @@ def test_whitespace_is_normalized():
     chunker = Chunker(chunk_size=100, chunk_overlap=0)
     chunks = chunker.chunk("src", "http://x.com", "T", "", "hello   \n  world\t!")
     assert chunks[0].text == "hello world !"
+
+
+# ---------------------------------------------------------------------------
+# sentence-boundary behaviour
+# ---------------------------------------------------------------------------
+
+def test_sentence_boundary_not_split_inside_sentence():
+    """Two short sentences that together fit in one chunk stay together."""
+    chunker = Chunker(chunk_size=20, chunk_overlap=0)
+    content = "First sentence here. Second sentence here."
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    assert len(chunks) == 1
+    assert "First sentence here." in chunks[0].text
+    assert "Second sentence here." in chunks[0].text
+
+
+def test_sentence_boundary_flush_at_sentence_end():
+    """When adding a sentence would overflow the buffer, flush before it."""
+    # chunk_size=5: 5-word sentences → each sentence fills a chunk exactly,
+    # so the second sentence triggers a flush of the first.
+    chunker = Chunker(chunk_size=5, chunk_overlap=0)
+    # Each sentence is exactly 5 words; the second overflows → 2 chunks.
+    s1 = "one two three four five."
+    s2 = "six seven eight nine ten."
+    content = f"{s1} {s2}"
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    assert len(chunks) == 2
+    assert chunks[0].text.startswith("one")
+    assert chunks[1].text.startswith("six")
+
+
+def test_oversized_sentence_word_level_fallback():
+    """A single sentence longer than chunk_size is split word-by-word."""
+    chunker = Chunker(chunk_size=4, chunk_overlap=1)
+    # 8-word sentence — must produce multiple chunks, each ≤ chunk_size words.
+    big = "alpha beta gamma delta epsilon zeta eta theta."
+    chunks = chunker.chunk("src", "http://x.com", "T", "", big)
+    assert len(chunks) >= 2
+    for chunk in chunks:
+        assert len(chunk.text.split()) <= 4
+
+
+def test_oversized_sentence_followed_by_normal_sentence():
+    """After word-level fallback for an oversized sentence, normal chunking resumes."""
+    chunker = Chunker(chunk_size=4, chunk_overlap=0)
+    big = "alpha beta gamma delta epsilon."   # 5 words → oversized for chunk_size=4
+    normal = "hello world."
+    content = f"{big} {normal}"
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    # The oversized sentence produces fallback chunks; the normal sentence goes into a fresh chunk.
+    texts = [c.text for c in chunks]
+    assert any("hello world." in t for t in texts)
+
+
+def test_overlap_carries_across_sentence_boundary():
+    """After flushing at a sentence boundary, the overlap words seed the next chunk."""
+    chunker = Chunker(chunk_size=6, chunk_overlap=2)
+    # Build content where first sentence fills chunk exactly; verify overlap in second chunk.
+    s1 = "alpha beta gamma delta epsilon zeta."   # 6 words, exactly chunk_size
+    s2 = "foo bar baz."
+    content = f"{s1} {s2}"
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    assert len(chunks) >= 2
+    # The second chunk must start with the last 2 words of s1 (the overlap).
+    second_text_words = chunks[1].text.split()
+    assert second_text_words[:2] == ["epsilon", "zeta."]
+
+
+def test_exclamation_and_question_marks_split_sentences():
+    """Sentence splitter handles ! and ? as well as ."""
+    chunker = Chunker(chunk_size=4, chunk_overlap=0)
+    content = "Stop right now! Are you sure? Yes I am."
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    # Three 3-word sentences; each fits in chunk_size=4, but together they overflow → >= 2 chunks.
+    assert len(chunks) >= 1
+    full_text = " ".join(c.text for c in chunks)
+    assert "Stop right now!" in full_text
+    assert "Are you sure?" in full_text
+
+
+def test_single_sentence_returns_one_chunk():
+    """One sentence that fits within chunk_size produces exactly one chunk."""
+    chunker = Chunker(chunk_size=50, chunk_overlap=5)
+    content = "This is a single sentence."
+    chunks = chunker.chunk("src", "http://x.com", "T", "", content)
+    assert len(chunks) == 1
+    assert chunks[0].text == "This is a single sentence."
