@@ -73,6 +73,13 @@ class RAGPipeline:
             else self._settings.context_chunks
         )
         hits, chunks = self._retrieve_chunks(question=question, candidate_k=candidate_k)
+        logger.info(
+            "rag_query_trace query=%s candidate_k=%s selected_chunks=%s selected_chunk_ids=%s",
+            question,
+            candidate_k,
+            len(chunks),
+            [c.chunk_id for c in chunks[:10]],
+        )
         sources = [
             RAGSource(chunk_id=c.chunk_id, url=c.url, title=c.title)
             for c in chunks
@@ -120,6 +127,13 @@ class RAGPipeline:
                 if self._web_search_orchestrator and self._web_search_orchestrator.enabled:
                     web_search_result = self._web_search_orchestrator.run(question)
                     hits, chunks = self._retrieve_chunks(question=question, candidate_k=candidate_k)
+                    logger.info(
+                        "rag_query_trace_after_web_search query=%s selected_chunks=%s selected_chunk_ids=%s indexed_count=%s",
+                        question,
+                        len(chunks),
+                        [c.chunk_id for c in chunks[:10]],
+                        web_search_result.indexed_count,
+                    )
                     sources = [
                         RAGSource(chunk_id=c.chunk_id, url=c.url, title=c.title)
                         for c in chunks
@@ -151,13 +165,34 @@ class RAGPipeline:
             web_search=web_search_result,
         )
 
+    def _expand_with_hyde(self, question: str) -> str:
+        messages = [
+            {"role": "system", "content": "Write a concise factual paragraph (2-4 sentences) that directly answers the question. Only the paragraph, no preamble."},
+            {"role": "user", "content": question},
+        ]
+        try:
+            return self._llm_client.chat(messages).content
+        except Exception:
+            logger.exception("hyde_expansion_failed — falling back to original query")
+            return question
+
     def _retrieve_chunks(self, *, question: str, candidate_k: int):
-        hits = self._retriever.search(query=question, top_k=candidate_k)
+        if self._settings.hyde_enabled:
+            hypothesis = self._expand_with_hyde(question)
+            hits = self._retriever.search(query=question, top_k=candidate_k, vector_query=hypothesis)
+        else:
+            hits = self._retriever.search(query=question, top_k=candidate_k)
         chunk_ids = [h.doc_id for h in hits]
         chunks_map = self._chunk_repo.get_chunks(chunk_ids)
+        missing_chunk_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunks_map]
 
         logger.info(
-            "rag_retrieval query=%s candidates=%s", question, len(chunk_ids)
+            "rag_retrieval query=%s candidates=%s resolved_chunks=%s missing_chunks=%s top_hit_ids=%s",
+            question,
+            len(chunk_ids),
+            len(chunks_map),
+            len(missing_chunk_ids),
+            chunk_ids[:10],
         )
 
         # 2. Second-stage: re-rank with cross-encoder if available

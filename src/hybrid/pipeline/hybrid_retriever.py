@@ -39,13 +39,14 @@ class HybridRetriever:
         self._bm25_weight = bm25_weight
         self._vector_weight = vector_weight
 
-    def search(self, query: str, top_k: int) -> list[HybridResult]:
+    def search(self, query: str, top_k: int, vector_query: str | None = None) -> list[HybridResult]:
         if not query.strip():
             raise ValueError("Query must not be empty.")
 
+        vector_q = vector_query if vector_query is not None else query
         with ThreadPoolExecutor(max_workers=2) as executor:
             bm25_future = executor.submit(self._bm25.search, query, self.fetch_k)
-            vector_future = executor.submit(self._vector.search, query, self.fetch_k)
+            vector_future = executor.submit(self._vector.search, vector_q, self.fetch_k)
             bm25_results = bm25_future.result()
             vector_results = vector_future.result()
 

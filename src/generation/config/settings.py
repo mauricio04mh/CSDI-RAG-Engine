@@ -16,6 +16,7 @@ class GenerationSettings:
     reranker_enabled: bool
     reranker_model: str
     reranker_candidate_k: int
+    hyde_enabled: bool
 
 
 def load_settings() -> GenerationSettings:
@@ -30,4 +31,5 @@ def load_settings() -> GenerationSettings:
         reranker_enabled=os.getenv("RERANKER_ENABLED", "true").lower() == "true",
         reranker_model=os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
         reranker_candidate_k=int(os.getenv("RERANKER_CANDIDATE_K", "30")),
+        hyde_enabled=os.getenv("HYDE_ENABLED", "false").lower() == "true",
     )
