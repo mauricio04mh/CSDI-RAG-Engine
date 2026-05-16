@@ -17,6 +17,7 @@ from testcontainers.postgres import PostgresContainer
 # Import model modules so their metadata is registered
 from src.database.models.bm25_models import Base as BM25Base
 from src.database.models.chunk_models import Base as ChunkBase
+from src.database.models.source_document_models import Base as SourceDocumentBase
 from src.database.models.vector_models import Base as VectorBase
 from src.database.models.web_search_models import Base as WebSearchBase
 
@@ -24,6 +25,7 @@ _POSTGRES_IMAGE = "pgvector/pgvector:pg17"
 _TRUNCATE_TABLES = """
     TRUNCATE
         chunks,
+        source_documents,
         bm25_postings,
         bm25_doc_lengths,
         bm25_terms,
@@ -54,6 +56,7 @@ def engine(pg_container: PostgresContainer) -> Engine:
         conn.commit()
 
     ChunkBase.metadata.create_all(eng)
+    SourceDocumentBase.metadata.create_all(eng)
     BM25Base.metadata.create_all(eng)
     VectorBase.metadata.create_all(eng)
     WebSearchBase.metadata.create_all(eng)
