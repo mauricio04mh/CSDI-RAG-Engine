@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 class VectorRepository:
     """All SQL operations for the dense vector index domain."""
 
+    document_model = VectorDocument
+    metadata_model = VectorIndexMetadata
+
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
 
@@ -28,7 +31,7 @@ class VectorRepository:
         ]
         with Session(self.engine) as session:
             with session.begin():
-                session.execute(VectorDocument.__table__.insert(), rows)
+                session.execute(self.document_model.__table__.insert(), rows)
         logger.info("vector_documents_saved count=%s", len(rows))
 
     def load_all_documents(self) -> tuple[list[str], np.ndarray]:
@@ -39,9 +42,9 @@ class VectorRepository:
         """
         with Session(self.engine) as session:
             rows = session.execute(
-                select(VectorDocument.doc_id, VectorDocument.embedding)
-                .where(VectorDocument.deleted_at.is_(None))
-                .order_by(VectorDocument.id.asc())
+                select(self.document_model.doc_id, self.document_model.embedding)
+                .where(self.document_model.deleted_at.is_(None))
+                .order_by(self.document_model.id.asc())
             ).all()
 
         if not rows:
@@ -56,7 +59,7 @@ class VectorRepository:
         """Upsert the single vector index metadata row (id=1)."""
         with Session(self.engine) as session:
             with session.begin():
-                stmt = pg_insert(VectorIndexMetadata).values(
+                stmt = pg_insert(self.metadata_model).values(
                     id=1,
                     embedding_model=metadata["embedding_model"],
                     vector_dimension=int(metadata["vector_dimension"]),
@@ -84,7 +87,7 @@ class VectorRepository:
         """Load the vector index metadata row, or None if not found."""
         with Session(self.engine) as session:
             row = session.execute(
-                select(VectorIndexMetadata).where(VectorIndexMetadata.id == 1)
+                select(self.metadata_model).where(self.metadata_model.id == 1)
             ).scalar_one_or_none()
 
         if row is None:
@@ -128,6 +131,6 @@ class VectorRepository:
         """Return True if a document with this ID is already indexed."""
         with Session(self.engine) as session:
             result = session.execute(
-                select(VectorDocument.id).where(VectorDocument.doc_id == doc_id).limit(1)
+                select(self.document_model.id).where(self.document_model.doc_id == doc_id).limit(1)
             ).first()
         return result is not None

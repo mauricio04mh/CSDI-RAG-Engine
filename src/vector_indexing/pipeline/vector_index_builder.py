@@ -33,13 +33,19 @@ class VectorIndexBuilder:
     database on startup and used for fast ANN search at query time.
     """
 
-    def __init__(self, settings: VectorSettings, engine: Engine) -> None:
+    def __init__(
+        self,
+        settings: VectorSettings,
+        engine: Engine,
+        vector_repo: VectorRepository | None = None,
+        embedding_model: EmbeddingModel | None = None,
+    ) -> None:
         self.settings = settings
-        self.embedding_model = EmbeddingModel(
+        self.embedding_model = embedding_model or EmbeddingModel(
             model_name=settings.embedding_model,
             expected_dimension=settings.vector_dimension,
         )
-        self._vector_repo = VectorRepository(engine)
+        self._vector_repo = vector_repo or VectorRepository(engine)
         self.vector_store = VectorStore()
         self.faiss_index = FaissIndex(
             dimension=settings.vector_dimension,

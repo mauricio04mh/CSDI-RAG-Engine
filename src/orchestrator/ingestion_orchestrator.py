@@ -14,6 +14,7 @@ from src.ingestion.pipeline_services import (
     SourceDocumentPersistenceService,
 )
 from src.scraper.scraper import Scraper
+from src.sources_config.schemas import SourceConfig
 from src.sources_config.source_config_repository import SourceConfigRepository
 
 logger = logging.getLogger(__name__)
@@ -56,8 +57,13 @@ class IngestionOrchestrator:
         self._chunk_indexing_service = ChunkIndexingStageService(chunk_ingestion)
 
     def ingest(self, source_id: str) -> IngestionReport:
-        """Run the full pipeline for a source and return a summary report."""
+        """Run the full pipeline for a configured source and return a summary report."""
         source = self._source_repo.get_source(source_id)
+        return self.ingest_source(source)
+
+    def ingest_source(self, source: SourceConfig) -> IngestionReport:
+        """Run the full pipeline for an explicit SourceConfig and return a summary report."""
+        source_id = source.source_id
         logger.info("ingestion_started source=%s", source_id)
 
         crawl_result = self._crawl_service.crawl(source)

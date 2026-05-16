@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,9 +16,16 @@ from src.config_api.api.routes import router as config_router
 from src.database.config import build_engine
 from src.database.repositories.chunk_repository import ChunkRepository
 from src.database.repositories.source_document_repository import SourceDocumentRepository
+from src.database.repositories.web_cache_repository import (
+    WebCacheBM25Repository,
+    WebCacheChunkRepository,
+    WebCacheDocumentRepository,
+    WebCacheVectorRepository,
+)
 from src.database.repositories.web_search_repository import WebSearchRepository
 from src.file_upload.api.routes import router as upload_router
 from src.generation.api.routes import router as rag_router
+from src.generation.chat_history import ChatHistoryStore
 from src.generation.config.settings import load_settings as load_generation_settings
 from src.generation.llm_client import LLMClient
 from src.generation.rag_pipeline import RAGPipeline
@@ -95,6 +103,44 @@ def create_app() -> FastAPI:
         source_document_repo=source_document_repo,
     )
 
+    web_cache_chunk_repo = WebCacheChunkRepository(engine)
+    web_cache_bm25_repo = WebCacheBM25Repository(engine)
+    web_cache_vector_repo = WebCacheVectorRepository(engine)
+    web_cache_index_builder = IndexBuilder(
+        settings=indexing_settings,
+        engine=engine,
+        bm25_repo=web_cache_bm25_repo,
+    )
+    web_cache_bm25_retriever = BM25Retriever(
+        settings=bm25_settings,
+        engine=engine,
+        bm25_repo=web_cache_bm25_repo,
+    )
+    web_cache_vector_index_builder = VectorIndexBuilder(
+        settings=vector_settings,
+        engine=engine,
+        vector_repo=web_cache_vector_repo,
+        embedding_model=vector_index_builder.embedding_model,
+    )
+    web_cache_vector_retriever = VectorRetriever(
+        embedding_model=web_cache_vector_index_builder.embedding_model,
+        faiss_index=web_cache_vector_index_builder.faiss_index,
+        vector_store=web_cache_vector_index_builder.vector_store,
+        lock=web_cache_vector_index_builder._lock,
+    )
+    web_cache_hybrid_retriever = HybridRetriever(
+        bm25_retriever=web_cache_bm25_retriever,
+        vector_retriever=web_cache_vector_retriever,
+        bm25_weight=float(os.getenv("HYBRID_BM25_WEIGHT", "0.3")),
+        vector_weight=float(os.getenv("HYBRID_VECTOR_WEIGHT", "0.7")),
+    )
+    web_cache_ingestion_service = ChunkIngestionService(
+        chunk_repo=web_cache_chunk_repo,
+        index_builder=web_cache_index_builder,
+        vector_index_builder=web_cache_vector_index_builder,
+        bm25_retriever=web_cache_bm25_retriever,
+    )
+
     llm_client = LLMClient(
         base_url=generation_settings.base_url,
         api_key=generation_settings.api_key,
@@ -113,12 +159,15 @@ def create_app() -> FastAPI:
         enabled=os.getenv("WEB_SEARCH_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"},
         top_k=int(os.getenv("WEB_SEARCH_TOP_K", "5")),
     )
+    web_cache_enabled = os.getenv("WEB_CACHE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    web_cache_top_k = int(os.getenv("WEB_CACHE_TOP_K", "10"))
     web_search_orchestrator = WebSearchOrchestrator(
         provider=DuckDuckGoSearchProvider(),
         settings=web_search_settings,
         fetcher=HttpDocumentFetcher(),
-        chunk_ingestion=chunk_ingestion_service,
+        web_cache_ingestion=web_cache_ingestion_service,
         web_search_repo=WebSearchRepository(engine),
+        web_cache_document_repo=WebCacheDocumentRepository(engine),
     )
     rag_pipeline = RAGPipeline(
         retriever=hybrid_retriever,
@@ -128,7 +177,13 @@ def create_app() -> FastAPI:
         reranker=reranker,
         insufficiency_detector=insufficiency_detector,
         web_search_orchestrator=web_search_orchestrator,
+        web_cache_retriever=web_cache_hybrid_retriever,
+        web_cache_chunk_repo=web_cache_chunk_repo,
+        web_cache_enabled=web_cache_enabled,
+        web_cache_top_k=web_cache_top_k,
     )
+    chat_history_store = ChatHistoryStore.from_env()
+    auto_ingest_on_start = os.getenv("AUTO_INGEST_ON_START", "true").strip().lower() in {"1", "true", "yes", "on"}
 
     _persisted_config = load_config_from_disk()
     if "bm25_weight" in _persisted_config and "vector_weight" in _persisted_config:
@@ -136,10 +191,19 @@ def create_app() -> FastAPI:
             _persisted_config["bm25_weight"],
             _persisted_config["vector_weight"],
         )
-    if "model" in _persisted_config or "temperature" in _persisted_config:
+    if (
+        "model" in _persisted_config
+        or "temperature" in _persisted_config
+        or "llm_base_url" in _persisted_config
+        or "llm_api_key" in _persisted_config
+    ):
         llm_client.update_settings(
             model=_persisted_config.get("model", generation_settings.model),
             temperature=_persisted_config.get("temperature", generation_settings.temperature),
+        )
+        llm_client.update_connection(
+            base_url=_persisted_config.get("llm_base_url", generation_settings.base_url),
+            api_key=_persisted_config.get("llm_api_key", generation_settings.api_key),
         )
     if "reranker_enabled" in _persisted_config:
         persisted_reranker_on = _persisted_config["reranker_enabled"]
@@ -164,16 +228,47 @@ def create_app() -> FastAPI:
         app.state.chunk_repo = chunk_repo
         app.state.source_document_repo = source_document_repo
         app.state.chunk_ingestion_service = chunk_ingestion_service
+        app.state.web_cache_chunk_repo = web_cache_chunk_repo
+        app.state.web_cache_ingestion_service = web_cache_ingestion_service
+        app.state.web_cache_bm25_retriever = web_cache_bm25_retriever
+        app.state.web_cache_vector_index_builder = web_cache_vector_index_builder
+        app.state.web_cache_hybrid_retriever = web_cache_hybrid_retriever
         app.state.ingestion_orchestrator = ingestion_orchestrator
         app.state.rag_pipeline = rag_pipeline
+        app.state.chat_history_store = chat_history_store
         app.state.llm_client = llm_client
         app.state.reranker_model = generation_settings.reranker_model
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()
+        web_cache_index_builder.start()
+        web_cache_bm25_retriever.start()
+        web_cache_vector_index_builder.start()
+        if auto_ingest_on_start:
+            def run_auto_ingest() -> None:
+                for source in source_repo.list_sources():
+                    try:
+                        report = ingestion_orchestrator.ingest(source.source_id)
+                        if report.chunks_indexed > 0:
+                            bm25_retriever.reload()
+                        logging.getLogger(__name__).info(
+                            "auto_ingest_completed source=%s pages=%s indexed=%s",
+                            source.source_id,
+                            report.pages_scraped,
+                            report.chunks_indexed,
+                        )
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "auto_ingest_failed source=%s",
+                            source.source_id,
+                        )
+
+            threading.Thread(target=run_auto_ingest, daemon=True).start()
         try:
             yield
         finally:
+            web_cache_vector_index_builder.stop()
+            web_cache_index_builder.stop()
             vector_index_builder.stop()
             index_builder.stop()
             engine.dispose()
@@ -186,7 +281,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=["http://localhost:5173"],
         allow_methods=["*"],
         allow_headers=["*"],
     )

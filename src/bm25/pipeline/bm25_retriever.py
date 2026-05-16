@@ -26,9 +26,9 @@ class BM25Result:
 class BM25Retriever:
     """Loads the inverted index from the database and ranks candidates with BM25."""
 
-    def __init__(self, settings: BM25Settings, engine: Engine) -> None:
+    def __init__(self, settings: BM25Settings, engine: Engine, bm25_repo: BM25Repository | None = None) -> None:
         self.settings = settings
-        self._bm25_repo = BM25Repository(engine)
+        self._bm25_repo = bm25_repo or BM25Repository(engine)
         self.scorer = BM25Scorer(k1=settings.bm25_k1, b=settings.bm25_b)
         self._lock = threading.RLock()
         self._index = BM25Index(

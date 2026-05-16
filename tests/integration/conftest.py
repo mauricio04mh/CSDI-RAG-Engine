@@ -19,6 +19,7 @@ from src.database.models.bm25_models import Base as BM25Base
 from src.database.models.chunk_models import Base as ChunkBase
 from src.database.models.source_document_models import Base as SourceDocumentBase
 from src.database.models.vector_models import Base as VectorBase
+from src.database.models.web_cache_models import Base as WebCacheBase
 from src.database.models.web_search_models import Base as WebSearchBase
 
 _POSTGRES_IMAGE = "pgvector/pgvector:pg17"
@@ -32,6 +33,14 @@ _TRUNCATE_TABLES = """
         bm25_segments,
         vector_documents,
         vector_index_metadata,
+        web_cache_bm25_postings,
+        web_cache_bm25_doc_lengths,
+        web_cache_bm25_terms,
+        web_cache_bm25_segments,
+        web_cache_vector_documents,
+        web_cache_vector_index_metadata,
+        web_cache_chunks,
+        web_cache_documents,
         web_search_hits,
         web_search_runs
     RESTART IDENTITY CASCADE
@@ -60,6 +69,7 @@ def engine(pg_container: PostgresContainer) -> Engine:
     BM25Base.metadata.create_all(eng)
     VectorBase.metadata.create_all(eng)
     WebSearchBase.metadata.create_all(eng)
+    WebCacheBase.metadata.create_all(eng)
 
     yield eng
     eng.dispose()

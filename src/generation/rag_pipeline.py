@@ -25,6 +25,7 @@ class RAGSource:
     chunk_id: str
     url: str
     title: str
+    source_type: str = "corpus"
 
 
 @dataclass(slots=True)
@@ -36,6 +37,10 @@ class RAGResult:
     prompt_tokens: int
     completion_tokens: int
     web_search: WebSearchRunResult | None = None
+    cache_searched: bool = False
+    cache_hits: int = 0
+    external_search_executed: bool = False
+    external_indexed_count: int = 0
 
 
 class RAGPipeline:
@@ -56,6 +61,10 @@ class RAGPipeline:
         reranker: CrossEncoderReranker | None = None,
         insufficiency_detector: InsufficiencyDetector | None = None,
         web_search_orchestrator: WebSearchOrchestrator | None = None,
+        web_cache_retriever: HybridRetriever | None = None,
+        web_cache_chunk_repo: ChunkRepository | None = None,
+        web_cache_enabled: bool = True,
+        web_cache_top_k: int = 10,
     ) -> None:
         self._retriever = retriever
         self._chunk_repo = chunk_repo
@@ -64,6 +73,10 @@ class RAGPipeline:
         self._reranker = reranker
         self._insufficiency_detector = insufficiency_detector
         self._web_search_orchestrator = web_search_orchestrator
+        self._web_cache_retriever = web_cache_retriever
+        self._web_cache_chunk_repo = web_cache_chunk_repo
+        self._web_cache_enabled = web_cache_enabled
+        self._web_cache_top_k = web_cache_top_k
 
     def query(self, question: str) -> RAGResult:
         # 1. First-stage: retrieve candidate chunks
@@ -73,46 +86,19 @@ class RAGPipeline:
             else self._settings.context_chunks
         )
         hits, chunks = self._retrieve_chunks(question=question, candidate_k=candidate_k)
-        logger.info(
-            "rag_query_trace query=%s candidate_k=%s selected_chunks=%s selected_chunk_ids=%s",
-            question,
-            candidate_k,
-            len(chunks),
-            [c.chunk_id for c in chunks[:10]],
-        )
-        sources = [
-            RAGSource(chunk_id=c.chunk_id, url=c.url, title=c.title)
-            for c in chunks
-        ]
         web_search_result: WebSearchRunResult | None = None
+        cache_searched = False
+        cache_hits = 0
+        external_search_executed = False
+        external_indexed_count = 0
+        final_chunks = chunks
 
         if self._insufficiency_detector:
-            score_by_chunk_id = {h.doc_id: h.score for h in hits}
-            detector_results = [
-                RetrievedChunk(
-                    chunk_id=c.chunk_id,
-                    text=c.text,
-                    score=score_by_chunk_id.get(c.chunk_id),
-                    source_id=c.source_id,
-                    url=c.url,
-                    title=c.title,
-                    breadcrumb=c.breadcrumb,
-                )
-                for c in chunks
-            ]
-            decision = self._insufficiency_detector.evaluate(
+            decision = self._evaluate_sufficiency(
                 query=question,
-                results=detector_results,
-                retrieval_context={
-                    "fusion": {
-                        "method": "rrf",
-                        "rrf_k": 60,
-                        "weights": {
-                            "bm25": self._retriever._bm25_weight,
-                            "vector": self._retriever._vector_weight,
-                        },
-                    }
-                },
+                hits=hits,
+                chunks=chunks,
+                retriever=self._retriever,
             )
             logger.info(
                 "insufficiency_detector query=%s needs_web_search=%s confidence=%.4f reasons=%s metrics=%s",
@@ -124,28 +110,80 @@ class RAGPipeline:
             )
 
             if decision.needs_web_search:
-                if self._web_search_orchestrator and self._web_search_orchestrator.enabled:
-                    web_search_result = self._web_search_orchestrator.run(question)
-                    hits, chunks = self._retrieve_chunks(question=question, candidate_k=candidate_k)
-                    logger.info(
-                        "rag_query_trace_after_web_search query=%s selected_chunks=%s selected_chunk_ids=%s indexed_count=%s",
-                        question,
-                        len(chunks),
-                        [c.chunk_id for c in chunks[:10]],
-                        web_search_result.indexed_count,
+                combined_hits = list(hits)
+                combined_chunks = list(chunks)
+
+                if self._web_cache_enabled and self._web_cache_retriever and self._web_cache_chunk_repo:
+                    cache_searched = True
+                    web_candidate_k = max(self._web_cache_top_k, candidate_k)
+                    cache_retrieval_hits, cache_chunks = self._retrieve_chunks(
+                        question=question,
+                        candidate_k=web_candidate_k,
+                        final_k=self._web_cache_top_k,
+                        retriever=self._web_cache_retriever,
+                        chunk_repo=self._web_cache_chunk_repo,
                     )
-                    sources = [
-                        RAGSource(chunk_id=c.chunk_id, url=c.url, title=c.title)
-                        for c in chunks
-                    ]
-                else:
+                    cache_hits = len(cache_chunks)
+                    combined_hits = _merge_hits(combined_hits, cache_retrieval_hits)
+                    combined_chunks = _merge_chunks(combined_chunks, cache_chunks)
+                    decision = self._evaluate_sufficiency(
+                        query=question,
+                        hits=combined_hits,
+                        chunks=combined_chunks,
+                        retriever=self._retriever,
+                    )
                     logger.info(
-                        "web_search_disabled_fallback_to_llm query=%s",
+                        "web_cache_sufficiency query=%s needs_web_search=%s confidence=%.4f cache_hits=%s",
                         question,
+                        decision.needs_web_search,
+                        decision.sufficiency_confidence,
+                        cache_hits,
                     )
 
+                if self._web_search_orchestrator and self._web_search_orchestrator.enabled:
+                    if decision.needs_web_search:
+                        external_search_executed = True
+                        web_search_result = self._web_search_orchestrator.run(question)
+                        external_indexed_count = web_search_result.indexed_count
+
+                        if self._web_cache_retriever and self._web_cache_chunk_repo:
+                            cache_searched = True
+                            web_candidate_k = max(self._web_cache_top_k, candidate_k)
+                            cache_retrieval_hits, cache_chunks = self._retrieve_chunks(
+                                question=question,
+                                candidate_k=web_candidate_k,
+                                final_k=self._web_cache_top_k,
+                                retriever=self._web_cache_retriever,
+                                chunk_repo=self._web_cache_chunk_repo,
+                            )
+                            cache_hits = len(cache_chunks)
+                            combined_hits = _merge_hits(hits, cache_retrieval_hits)
+                            combined_chunks = _merge_chunks(chunks, cache_chunks)
+                else:
+                    if decision.needs_web_search:
+                        logger.info(
+                            "web_search_disabled_fallback_to_llm query=%s",
+                            question,
+                        )
+
+                final_chunks = self._select_prompt_chunks(
+                    question=question,
+                    hits=combined_hits,
+                    chunks=combined_chunks,
+                )
+
+        sources = [
+            RAGSource(
+                chunk_id=c.chunk_id,
+                url=c.url,
+                title=c.title,
+                source_type=_source_type_for_chunk(c),
+            )
+            for c in final_chunks
+        ]
+
         # 3. Build prompt and call LLM
-        messages = build_messages(question, chunks)
+        messages = build_messages(question, final_chunks)
         response = self._llm_client.chat(messages)
 
         logger.info(
@@ -163,6 +201,10 @@ class RAGPipeline:
             prompt_tokens=response.prompt_tokens,
             completion_tokens=response.completion_tokens,
             web_search=web_search_result,
+            cache_searched=cache_searched,
+            cache_hits=cache_hits,
+            external_search_executed=external_search_executed,
+            external_indexed_count=external_indexed_count,
         )
 
     def _expand_with_hyde(self, question: str) -> str:
@@ -176,14 +218,25 @@ class RAGPipeline:
             logger.exception("hyde_expansion_failed — falling back to original query")
             return question
 
-    def _retrieve_chunks(self, *, question: str, candidate_k: int):
+    def _retrieve_chunks(
+        self,
+        *,
+        question: str,
+        candidate_k: int,
+        final_k: int | None = None,
+        retriever: HybridRetriever | None = None,
+        chunk_repo: ChunkRepository | None = None,
+    ):
+        active_retriever = retriever or self._retriever
+        active_chunk_repo = chunk_repo or self._chunk_repo
+        final_k = final_k or self._settings.context_chunks
         if self._settings.hyde_enabled:
             hypothesis = self._expand_with_hyde(question)
-            hits = self._retriever.search(query=question, top_k=candidate_k, vector_query=hypothesis)
+            hits = active_retriever.search(query=question, top_k=candidate_k, vector_query=hypothesis)
         else:
-            hits = self._retriever.search(query=question, top_k=candidate_k)
+            hits = active_retriever.search(query=question, top_k=candidate_k)
         chunk_ids = [h.doc_id for h in hits]
-        chunks_map = self._chunk_repo.get_chunks(chunk_ids)
+        chunks_map = active_chunk_repo.get_chunks(chunk_ids)
         missing_chunk_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunks_map]
 
         logger.info(
@@ -205,12 +258,84 @@ class RAGPipeline:
             reranked = self._reranker.rerank(
                 query=question,
                 candidates=candidates,
-                top_k=self._settings.context_chunks,
+                top_k=final_k,
             )
             final_ids = [r.doc_id for r in reranked]
             logger.info("rag_reranked top_k=%s", len(final_ids))
         else:
-            final_ids = chunk_ids[: self._settings.context_chunks]
+            final_ids = chunk_ids[:final_k]
 
         chunks = [chunks_map[cid] for cid in final_ids if cid in chunks_map]
         return hits, chunks
+
+    def _evaluate_sufficiency(self, *, query: str, hits, chunks, retriever) -> object:
+        score_by_chunk_id = {h.doc_id: h.score for h in hits}
+        detector_results = [
+            RetrievedChunk(
+                chunk_id=c.chunk_id,
+                text=c.text,
+                score=score_by_chunk_id.get(c.chunk_id),
+                source_id=c.source_id,
+                url=c.url,
+                title=c.title,
+                breadcrumb=c.breadcrumb,
+            )
+            for c in chunks
+        ]
+        return self._insufficiency_detector.evaluate(
+            query=query,
+            results=detector_results,
+            retrieval_context={
+                "fusion": {
+                    "method": "rrf",
+                    "rrf_k": 60,
+                    "weights": {
+                        "bm25": getattr(retriever, "_bm25_weight", 0.3),
+                        "vector": getattr(retriever, "_vector_weight", 0.7),
+                    },
+                }
+            },
+        )
+
+    def _select_prompt_chunks(self, *, question: str, hits, chunks):
+        if not self._reranker:
+            return chunks[: self._settings.context_chunks]
+
+        candidates = [(c.chunk_id, c.text) for c in chunks]
+        reranked = self._reranker.rerank(
+            query=question,
+            candidates=candidates,
+            top_k=self._settings.context_chunks,
+        )
+        chunk_by_id = {c.chunk_id: c for c in chunks}
+        return [chunk_by_id[r.doc_id] for r in reranked if r.doc_id in chunk_by_id]
+
+
+def _merge_chunks(primary, secondary):
+    merged = []
+    seen: set[str] = set()
+    for chunk in [*primary, *secondary]:
+        if chunk.chunk_id in seen:
+            continue
+        seen.add(chunk.chunk_id)
+        merged.append(chunk)
+    return merged
+
+
+def _merge_hits(primary, secondary):
+    merged = []
+    seen: set[str] = set()
+    for hit in [*primary, *secondary]:
+        if hit.doc_id in seen:
+            continue
+        seen.add(hit.doc_id)
+        merged.append(hit)
+    return merged
+
+
+def _source_type_for_chunk(chunk) -> str:
+    source_id = str(getattr(chunk, "source_id", ""))
+    breadcrumb = str(getattr(chunk, "breadcrumb", ""))
+    if source_id.startswith("web:") or breadcrumb == "web-search":
+        return "web_cache"
+    return "corpus"
