@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -183,7 +182,6 @@ def create_app() -> FastAPI:
         web_cache_top_k=web_cache_top_k,
     )
     chat_history_store = ChatHistoryStore.from_env()
-    auto_ingest_on_start = os.getenv("AUTO_INGEST_ON_START", "true").strip().lower() in {"1", "true", "yes", "on"}
 
     _persisted_config = load_config_from_disk()
     if "bm25_weight" in _persisted_config and "vector_weight" in _persisted_config:
@@ -244,26 +242,6 @@ def create_app() -> FastAPI:
         web_cache_index_builder.start()
         web_cache_bm25_retriever.start()
         web_cache_vector_index_builder.start()
-        if auto_ingest_on_start:
-            def run_auto_ingest() -> None:
-                for source in source_repo.list_sources():
-                    try:
-                        report = ingestion_orchestrator.ingest(source.source_id)
-                        if report.chunks_indexed > 0:
-                            bm25_retriever.reload()
-                        logging.getLogger(__name__).info(
-                            "auto_ingest_completed source=%s pages=%s indexed=%s",
-                            source.source_id,
-                            report.pages_scraped,
-                            report.chunks_indexed,
-                        )
-                    except Exception:
-                        logging.getLogger(__name__).exception(
-                            "auto_ingest_failed source=%s",
-                            source.source_id,
-                        )
-
-            threading.Thread(target=run_auto_ingest, daemon=True).start()
         try:
             yield
         finally:
