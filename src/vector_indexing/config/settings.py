@@ -7,14 +7,15 @@ from pathlib import Path
 from dotenv import dotenv_values, load_dotenv
 
 ENV_DEFAULTS: dict[str, str] = {
-    "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-    "VECTOR_DIMENSION": "384",
+    "EMBEDDING_MODEL": "BAAI/bge-m3",
+    "VECTOR_DIMENSION": "1024",
     "FAISS_INDEX_TYPE": "HNSW",
     "HNSW_M": "32",
     "HNSW_EF_CONSTRUCTION": "200",
     "HNSW_EF_SEARCH": "50",
-    # Number of documents buffered before vectors are inserted into FAISS.
-    "VECTOR_BATCH_SIZE": "128",
+    "VECTOR_BATCH_SIZE": "64",
+    "QUERY_PREFIX": "",
+    "FAISS_INDEX_PATH": "",
     "LOG_LEVEL": "INFO",
 }
 
@@ -30,6 +31,8 @@ class VectorSettings:
     hnsw_ef_construction: int
     hnsw_ef_search: int
     vector_batch_size: int
+    query_prefix: str
+    faiss_index_path: str
     log_level: str
     env_path: Path
     project_root: Path
@@ -78,6 +81,8 @@ def load_settings() -> VectorSettings:
             "VECTOR_BATCH_SIZE",
             os.getenv("VECTOR_BATCH_SIZE", ENV_DEFAULTS["VECTOR_BATCH_SIZE"]),
         ),
+        query_prefix=os.getenv("QUERY_PREFIX", ENV_DEFAULTS["QUERY_PREFIX"]),
+        faiss_index_path=os.getenv("FAISS_INDEX_PATH", ENV_DEFAULTS["FAISS_INDEX_PATH"]),
         log_level=os.getenv("LOG_LEVEL", ENV_DEFAULTS["LOG_LEVEL"]).upper(),
         env_path=env_path,
         project_root=project_root,
