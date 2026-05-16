@@ -22,6 +22,15 @@ class SourceItem(BaseModel):
     chunk_id: str
     url: str
     title: str
+    source_type: str = "corpus"
+
+
+class WebSearchInfo(BaseModel):
+    cache_searched: bool
+    cache_hits: int
+    external_search_executed: bool
+    external_indexed_count: int
+    hits_count: int = 0
 
 
 class RAGResponse(BaseModel):
@@ -31,6 +40,7 @@ class RAGResponse(BaseModel):
     model: str
     prompt_tokens: int
     completion_tokens: int
+    web_search: WebSearchInfo | None = None
 
 
 class ChatHistoryMessage(BaseModel):
@@ -69,10 +79,22 @@ def rag_query(payload: RAGRequest, request: Request) -> RAGResponse:
     response = RAGResponse(
         query=result.query,
         answer=result.answer,
-        sources=[SourceItem(chunk_id=s.chunk_id, url=s.url, title=s.title) for s in result.sources],
+        sources=[
+            SourceItem(chunk_id=s.chunk_id, url=s.url, title=s.title, source_type=s.source_type)
+            for s in result.sources
+        ],
         model=result.model,
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
+        web_search=WebSearchInfo(
+            cache_searched=result.cache_searched,
+            cache_hits=result.cache_hits,
+            external_search_executed=result.external_search_executed,
+            external_indexed_count=result.external_indexed_count,
+            hits_count=len(result.web_search.hits) if result.web_search else 0,
+        )
+        if result.cache_searched or result.external_search_executed or result.web_search
+        else None,
     )
 
     if payload.session_id:
@@ -83,7 +105,15 @@ def rag_query(payload: RAGRequest, request: Request) -> RAGResponse:
                 session_id=payload.session_id,
                 query=payload.query,
                 answer=response.answer,
-                sources=[{"chunk_id": s.chunk_id, "url": s.url, "title": s.title} for s in response.sources],
+                sources=[
+                    {
+                        "chunk_id": s.chunk_id,
+                        "url": s.url,
+                        "title": s.title,
+                        "source_type": s.source_type,
+                    }
+                    for s in response.sources
+                ],
                 model=response.model,
             )
 
@@ -109,8 +139,16 @@ def get_chat_history(session_id: str, request: Request) -> ChatHistoryResponse:
                     chunk_id = source.get("chunk_id")
                     url = source.get("url")
                     title = source.get("title")
+                    source_type = source.get("source_type", "corpus")
                     if isinstance(chunk_id, str) and isinstance(url, str) and isinstance(title, str):
-                        safe_sources.append(SourceItem(chunk_id=chunk_id, url=url, title=title))
+                        safe_sources.append(
+                            SourceItem(
+                                chunk_id=chunk_id,
+                                url=url,
+                                title=title,
+                                source_type=source_type if isinstance(source_type, str) else "corpus",
+                            )
+                        )
             sources = safe_sources
 
         if (

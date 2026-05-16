@@ -10,6 +10,8 @@ from src.database.models.bm25_models import Base as BM25Base
 from src.database.models.chunk_models import Base as ChunkBase
 from src.database.models.source_document_models import Base as SourceDocumentBase
 from src.database.models.vector_models import Base as VectorBase
+from src.database.models.web_cache_models import Base as WebCacheBase
+from src.database.models.web_search_models import Base as WebSearchBase
 
 config = context.config
 
@@ -21,6 +23,8 @@ target_metadata = [
     VectorBase.metadata,
     ChunkBase.metadata,
     SourceDocumentBase.metadata,
+    WebSearchBase.metadata,
+    WebCacheBase.metadata,
 ]
 
 _DEFAULT_URL = "postgresql://raguser:ragpassword@localhost:5432/ragengine"

@@ -58,8 +58,10 @@ class _FakeRetriever:
         self._hits = hits
         self._bm25_weight = 0.3
         self._vector_weight = 0.7
+        self.calls = 0
 
     def search(self, query: str, top_k: int) -> list["_Hit"]:
+        self.calls += 1
         return self._hits[:top_k]
 
 
@@ -130,6 +132,25 @@ class _FakeWebSearchProvider:
     def search(self, query: str, top_k: int) -> list[WebSearchHit]:
         self.calls.append((query, top_k))
         return [WebSearchHit(title="web title", url="https://web.example", snippet="web snippet")]
+
+
+def _coverage_only_settings() -> InsufficiencyDetectorSettings:
+    return _insufficiency_settings(
+        min_results=1,
+        expected_results=1,
+        min_top_score=0.0,
+        relevant_overlap_threshold=0.20,
+        min_relevant_results=1,
+        min_coverage_score=0.0,
+        min_answerability_score=0.0,
+        min_source_diversity=0.0,
+        confidence_threshold=0.50,
+        w_top=0.0,
+        w_quantity=0.0,
+        w_coverage=0.6,
+        w_diversity=0.0,
+        w_answerability=0.4,
+    )
 
 
 def test_rag_pipeline_falls_back_to_llm_when_detector_requires_web_but_orchestrator_is_missing() -> None:
@@ -247,3 +268,128 @@ def test_rag_pipeline_falls_back_to_llm_when_web_search_is_disabled() -> None:
     assert result.model == "test-model"
     assert result.web_search is None
     assert llm_client.calls == 1
+
+
+def test_rag_pipeline_uses_web_cache_before_external_search() -> None:
+    retriever = _FakeRetriever([_Hit(doc_id="c1", score=0.01)])
+    chunk_repo = _FakeChunkRepo({"c1": _Chunk(chunk_id="c1", text="contenido no relacionado")})
+    cache_retriever = _FakeRetriever([_Hit(doc_id="w1", score=0.02)])
+    cache_repo = _FakeChunkRepo(
+        {
+            "w1": _Chunk(
+                chunk_id="w1",
+                text="python decorators examples",
+                source_id="web:duckduckgo:example.com",
+                url="https://web.example",
+                title="web",
+                breadcrumb="web-search",
+            )
+        }
+    )
+    llm_client = _FakeLLMClient()
+    detector = InsufficiencyDetector(settings=_coverage_only_settings())
+    provider = _FakeWebSearchProvider()
+    orchestrator = WebSearchOrchestrator(
+        provider=provider,
+        settings=WebSearchSettings(enabled=True, top_k=4),
+    )
+    pipeline = RAGPipeline(
+        retriever=retriever,
+        chunk_repo=chunk_repo,
+        llm_client=llm_client,
+        settings=_generation_settings(),
+        reranker=None,
+        insufficiency_detector=detector,
+        web_search_orchestrator=orchestrator,
+        web_cache_retriever=cache_retriever,
+        web_cache_chunk_repo=cache_repo,
+        web_cache_enabled=True,
+        web_cache_top_k=5,
+    )
+
+    result = pipeline.query("python decorators")
+
+    assert cache_retriever.calls == 1
+    assert provider.calls == []
+    assert result.cache_searched is True
+    assert result.cache_hits == 1
+    assert result.external_search_executed is False
+    assert any(source.source_type == "web_cache" for source in result.sources)
+
+
+def test_rag_pipeline_runs_external_when_web_cache_is_insufficient() -> None:
+    retriever = _FakeRetriever([_Hit(doc_id="c1", score=0.01)])
+    chunk_repo = _FakeChunkRepo({"c1": _Chunk(chunk_id="c1", text="contenido no relacionado")})
+    cache_retriever = _FakeRetriever([_Hit(doc_id="w1", score=0.02)])
+    cache_repo = _FakeChunkRepo(
+        {
+            "w1": _Chunk(
+                chunk_id="w1",
+                text="tambien sin relacion",
+                source_id="web:duckduckgo:example.com",
+                url="https://web.example",
+                title="web",
+                breadcrumb="web-search",
+            )
+        }
+    )
+    llm_client = _FakeLLMClient()
+    detector = InsufficiencyDetector(settings=_coverage_only_settings())
+    provider = _FakeWebSearchProvider()
+    orchestrator = WebSearchOrchestrator(
+        provider=provider,
+        settings=WebSearchSettings(enabled=True, top_k=4),
+    )
+    pipeline = RAGPipeline(
+        retriever=retriever,
+        chunk_repo=chunk_repo,
+        llm_client=llm_client,
+        settings=_generation_settings(),
+        reranker=None,
+        insufficiency_detector=detector,
+        web_search_orchestrator=orchestrator,
+        web_cache_retriever=cache_retriever,
+        web_cache_chunk_repo=cache_repo,
+        web_cache_enabled=True,
+        web_cache_top_k=5,
+    )
+
+    result = pipeline.query("python decorators")
+
+    assert cache_retriever.calls == 2
+    assert provider.calls == [("python decorators", 4)]
+    assert result.external_search_executed is True
+    assert result.web_search is not None
+
+
+def test_rag_pipeline_skips_cache_when_web_cache_is_disabled() -> None:
+    retriever = _FakeRetriever([_Hit(doc_id="c1", score=0.01)])
+    chunk_repo = _FakeChunkRepo({"c1": _Chunk(chunk_id="c1", text="contenido no relacionado")})
+    cache_retriever = _FakeRetriever([_Hit(doc_id="w1", score=0.02)])
+    cache_repo = _FakeChunkRepo({"w1": _Chunk(chunk_id="w1", text="python decorators examples")})
+    llm_client = _FakeLLMClient()
+    detector = InsufficiencyDetector(settings=_coverage_only_settings())
+    provider = _FakeWebSearchProvider()
+    orchestrator = WebSearchOrchestrator(
+        provider=provider,
+        settings=WebSearchSettings(enabled=True, top_k=4),
+    )
+    pipeline = RAGPipeline(
+        retriever=retriever,
+        chunk_repo=chunk_repo,
+        llm_client=llm_client,
+        settings=_generation_settings(),
+        reranker=None,
+        insufficiency_detector=detector,
+        web_search_orchestrator=orchestrator,
+        web_cache_retriever=cache_retriever,
+        web_cache_chunk_repo=cache_repo,
+        web_cache_enabled=False,
+        web_cache_top_k=5,
+    )
+
+    result = pipeline.query("python decorators")
+
+    assert cache_retriever.calls == 1
+    assert provider.calls == [("python decorators", 4)]
+    assert result.external_search_executed is True

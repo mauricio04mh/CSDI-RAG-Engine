@@ -40,11 +40,11 @@ class MergeExecutionResult:
 class IndexBuilder:
     """Coordinates in-memory indexing and periodic segment flushing."""
 
-    def __init__(self, settings: Settings, engine: Engine) -> None:
+    def __init__(self, settings: Settings, engine: Engine, bm25_repo: BM25Repository | None = None) -> None:
         self.settings = settings
         self.active_state = ActiveIndexState()
         self.segment_builder = SegmentBuilder()
-        self._bm25_repo = BM25Repository(engine)
+        self._bm25_repo = bm25_repo or BM25Repository(engine)
         self.segment_writer = SegmentWriter(self._bm25_repo)
         self.segment_reader = SegmentReader(self._bm25_repo)
         self.segment_merge_policy = SegmentMergePolicy(settings.index_max_segments_in_memory)

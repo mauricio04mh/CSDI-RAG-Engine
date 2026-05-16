@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 class BM25Repository:
     """All SQL operations for the BM25 inverted index domain."""
 
+    segment_model = BM25Segment
+    term_model = BM25Term
+    posting_model = BM25Posting
+    doc_length_model = BM25DocLength
+
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
 
@@ -27,7 +32,7 @@ class BM25Repository:
         """Persist an IndexSegment to the four BM25 tables in one transaction."""
         with Session(self.engine) as session:
             with session.begin():
-                db_segment = BM25Segment(
+                db_segment = self.segment_model(
                     segment_id=segment.segment_id,
                     total_documents=int(segment.stats.get("total_documents", 0)),
                     total_terms=int(segment.stats.get("total_terms", 0)),
@@ -40,10 +45,10 @@ class BM25Repository:
                     {"segment_id": db_segment.id, "term": term, "doc_freq": df}
                     for term, df in segment.dictionary.items()
                 ]
-                session.execute(BM25Term.__table__.insert(), term_rows)
+                session.execute(self.term_model.__table__.insert(), term_rows)
 
                 term_records = session.execute(
-                    select(BM25Term.id, BM25Term.term).where(BM25Term.segment_id == db_segment.id)
+                    select(self.term_model.id, self.term_model.term).where(self.term_model.segment_id == db_segment.id)
                 ).all()
                 term_id_map = {row.term: row.id for row in term_records}
 
@@ -53,14 +58,14 @@ class BM25Repository:
                     for posting in postings
                 ]
                 if posting_rows:
-                    session.execute(BM25Posting.__table__.insert(), posting_rows)
+                    session.execute(self.posting_model.__table__.insert(), posting_rows)
 
                 doc_length_rows = [
                     {"segment_id": db_segment.id, "doc_id": doc_id, "doc_length": length}
                     for doc_id, length in segment.doc_lengths.items()
                 ]
                 if doc_length_rows:
-                    session.execute(BM25DocLength.__table__.insert(), doc_length_rows)
+                    session.execute(self.doc_length_model.__table__.insert(), doc_length_rows)
 
         logger.info("bm25_segment_persisted segment_id=%s", segment.segment_id)
 
@@ -69,7 +74,7 @@ class BM25Repository:
         with Session(self.engine) as session:
             with session.begin():
                 session.execute(
-                    delete(BM25Segment).where(BM25Segment.segment_id == segment_id)
+                    delete(self.segment_model).where(self.segment_model.segment_id == segment_id)
                 )
         logger.info("bm25_segment_deleted segment_id=%s", segment_id)
 
@@ -77,7 +82,7 @@ class BM25Repository:
         """Write the merged segment and delete source segments atomically."""
         with Session(self.engine) as session:
             with session.begin():
-                db_segment = BM25Segment(
+                db_segment = self.segment_model(
                     segment_id=merged_segment.segment_id,
                     total_documents=int(merged_segment.stats.get("total_documents", 0)),
                     total_terms=int(merged_segment.stats.get("total_terms", 0)),
@@ -90,10 +95,10 @@ class BM25Repository:
                     {"segment_id": db_segment.id, "term": term, "doc_freq": df}
                     for term, df in merged_segment.dictionary.items()
                 ]
-                session.execute(BM25Term.__table__.insert(), term_rows)
+                session.execute(self.term_model.__table__.insert(), term_rows)
 
                 term_records = session.execute(
-                    select(BM25Term.id, BM25Term.term).where(BM25Term.segment_id == db_segment.id)
+                    select(self.term_model.id, self.term_model.term).where(self.term_model.segment_id == db_segment.id)
                 ).all()
                 term_id_map = {row.term: row.id for row in term_records}
 
@@ -103,17 +108,17 @@ class BM25Repository:
                     for posting in postings
                 ]
                 if posting_rows:
-                    session.execute(BM25Posting.__table__.insert(), posting_rows)
+                    session.execute(self.posting_model.__table__.insert(), posting_rows)
 
                 doc_length_rows = [
                     {"segment_id": db_segment.id, "doc_id": doc_id, "doc_length": length}
                     for doc_id, length in merged_segment.doc_lengths.items()
                 ]
                 if doc_length_rows:
-                    session.execute(BM25DocLength.__table__.insert(), doc_length_rows)
+                    session.execute(self.doc_length_model.__table__.insert(), doc_length_rows)
 
                 session.execute(
-                    delete(BM25Segment).where(BM25Segment.segment_id.in_(source_segment_ids))
+                    delete(self.segment_model).where(self.segment_model.segment_id.in_(source_segment_ids))
                 )
 
         logger.info(
@@ -130,7 +135,7 @@ class BM25Repository:
         """Return all segment IDs ordered by creation time (ascending)."""
         with Session(self.engine) as session:
             rows = session.execute(
-                select(BM25Segment.segment_id).order_by(BM25Segment.created_at.asc())
+                select(self.segment_model.segment_id).order_by(self.segment_model.created_at.asc())
             ).all()
         return [row.segment_id for row in rows]
 
@@ -138,18 +143,18 @@ class BM25Repository:
         """Reconstruct an IndexSegment from the database."""
         with Session(self.engine) as session:
             db_seg = session.execute(
-                select(BM25Segment).where(BM25Segment.segment_id == segment_id)
+                select(self.segment_model).where(self.segment_model.segment_id == segment_id)
             ).scalar_one()
 
             posting_rows = session.execute(
-                select(BM25Term.term, BM25Posting.doc_id, BM25Posting.tf)
-                .join(BM25Posting, BM25Term.id == BM25Posting.term_id)
-                .where(BM25Term.segment_id == db_seg.id)
+                select(self.term_model.term, self.posting_model.doc_id, self.posting_model.tf)
+                .join(self.posting_model, self.term_model.id == self.posting_model.term_id)
+                .where(self.term_model.segment_id == db_seg.id)
             ).all()
 
             doc_length_rows = session.execute(
-                select(BM25DocLength.doc_id, BM25DocLength.doc_length)
-                .where(BM25DocLength.segment_id == db_seg.id)
+                select(self.doc_length_model.doc_id, self.doc_length_model.doc_length)
+                .where(self.doc_length_model.segment_id == db_seg.id)
             ).all()
 
             postings: dict[str, list[dict]] = defaultdict(list)
@@ -180,12 +185,12 @@ class BM25Repository:
         """
         with Session(self.engine) as session:
             posting_rows = session.execute(
-                select(BM25Term.term, BM25Posting.doc_id, BM25Posting.tf)
-                .join(BM25Posting, BM25Term.id == BM25Posting.term_id)
+                select(self.term_model.term, self.posting_model.doc_id, self.posting_model.tf)
+                .join(self.posting_model, self.term_model.id == self.posting_model.term_id)
             ).all()
 
             doc_length_rows = session.execute(
-                select(BM25DocLength.doc_id, BM25DocLength.doc_length)
+                select(self.doc_length_model.doc_id, self.doc_length_model.doc_length)
             ).all()
 
         raw_postings: dict[str, list[dict]] = defaultdict(list)

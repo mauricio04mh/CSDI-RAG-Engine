@@ -54,6 +54,14 @@ class _FakeWebSearchRepo:
         return 1
 
 
+class _FakeWebCacheDocumentRepo:
+    def __init__(self) -> None:
+        self.saved_batches: list[list[WebSearchDocument]] = []
+
+    def save_documents(self, documents: list[WebSearchDocument]) -> None:
+        self.saved_batches.append(documents)
+
+
 def test_orchestrator_returns_empty_when_disabled() -> None:
     provider = _FakeProvider(hits=[WebSearchHit(title="t", url="u", snippet="s")])
     orchestrator = WebSearchOrchestrator(
@@ -115,13 +123,15 @@ def test_orchestrator_fetches_documents_ingests_and_persists_run() -> None:
     )
     chunk_ingestion = _FakeChunkIngestion(indexed_chunks=2)
     repo = _FakeWebSearchRepo()
+    web_cache_document_repo = _FakeWebCacheDocumentRepo()
     orchestrator = WebSearchOrchestrator(
         provider=provider,
         settings=WebSearchSettings(enabled=True, top_k=3),
         fetcher=fetcher,
-        chunk_ingestion=chunk_ingestion,
+        web_cache_ingestion=chunk_ingestion,
         chunker=Chunker(chunk_size=2, chunk_overlap=1),
         web_search_repo=repo,
+        web_cache_document_repo=web_cache_document_repo,
     )
 
     result = orchestrator.run("python decorators")
@@ -131,6 +141,8 @@ def test_orchestrator_fetches_documents_ingests_and_persists_run() -> None:
     assert len(result.documents) == 1
     assert result.indexed_count == 2
     assert fetcher.calls == ["https://example.com"]
+    assert len(web_cache_document_repo.saved_batches) == 1
+    assert web_cache_document_repo.saved_batches[0][0].url == "https://example.com"
     assert chunk_ingestion.ingest_calls == 1
     assert chunk_ingestion.finalize_calls == 1
     assert len(repo.calls) == 1

@@ -30,16 +30,19 @@ class WebSearchOrchestrator:
         provider: SearchProvider,
         settings: WebSearchSettings,
         fetcher: DocumentFetcher | None = None,
+        web_cache_ingestion: ChunkIngestionService | None = None,
         chunk_ingestion: ChunkIngestionService | None = None,
         chunker: Chunker | None = None,
         web_search_repo=None,
+        web_cache_document_repo=None,
     ) -> None:
         self._provider = provider
         self._settings = settings
         self._fetcher = fetcher
-        self._chunk_ingestion = chunk_ingestion
+        self._web_cache_ingestion = web_cache_ingestion or chunk_ingestion
         self._chunker = chunker or Chunker()
         self._web_search_repo = web_search_repo
+        self._web_cache_document_repo = web_cache_document_repo
 
     @property
     def enabled(self) -> bool:
@@ -100,7 +103,16 @@ class WebSearchOrchestrator:
         return documents
 
     def _ingest_documents(self, documents) -> int:
-        if not documents or self._chunk_ingestion is None:
+        if not documents:
+            return 0
+
+        if self._web_cache_document_repo is not None:
+            try:
+                self._web_cache_document_repo.save_documents(documents)
+            except Exception:
+                logger.exception("web_cache_documents_persist_failed count=%s", len(documents))
+
+        if self._web_cache_ingestion is None:
             return 0
 
         chunks = []
@@ -116,9 +128,9 @@ class WebSearchOrchestrator:
                 )
             )
 
-        ingestion_result = self._chunk_ingestion.ingest_chunks(chunks)
+        ingestion_result = self._web_cache_ingestion.ingest_chunks(chunks)
         if ingestion_result.indexed_chunks > 0:
-            self._chunk_ingestion.finalize(reload_bm25=True)
+            self._web_cache_ingestion.finalize(reload_bm25=True)
         return ingestion_result.indexed_chunks
 
     def _persist_run(
