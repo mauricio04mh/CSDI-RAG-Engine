@@ -26,6 +26,7 @@ class RAGSource:
     url: str
     title: str
     source_type: str = "corpus"
+    retrieval_method: str = "hybrid"
 
 
 @dataclass(slots=True)
@@ -92,6 +93,7 @@ class RAGPipeline:
         external_search_executed = False
         external_indexed_count = 0
         final_chunks = chunks
+        final_hits = hits
 
         if self._insufficiency_detector:
             decision = self._evaluate_sufficiency(
@@ -166,18 +168,21 @@ class RAGPipeline:
                             question,
                         )
 
+                final_hits = combined_hits
                 final_chunks = self._select_prompt_chunks(
                     question=question,
                     hits=combined_hits,
                     chunks=combined_chunks,
                 )
 
+        found_by_map = {h.doc_id: getattr(h, "found_by", frozenset()) for h in final_hits}
         sources = [
             RAGSource(
                 chunk_id=c.chunk_id,
                 url=c.url,
                 title=c.title,
                 source_type=_source_type_for_chunk(c),
+                retrieval_method=_retrieval_method_for_chunk(c, found_by_map),
             )
             for c in final_chunks
         ]
@@ -207,6 +212,17 @@ class RAGPipeline:
             external_indexed_count=external_indexed_count,
         )
 
+    def _expand_with_hyde(self, question: str) -> str:
+        messages = [
+            {"role": "system", "content": "Write a concise factual paragraph (2-4 sentences) that directly answers the question. Only the paragraph, no preamble."},
+            {"role": "user", "content": question},
+        ]
+        try:
+            return self._llm_client.chat(messages).content
+        except Exception:
+            logger.exception("hyde_expansion_failed — falling back to original query")
+            return question
+
     def _retrieve_chunks(
         self,
         *,
@@ -219,12 +235,22 @@ class RAGPipeline:
         active_retriever = retriever or self._retriever
         active_chunk_repo = chunk_repo or self._chunk_repo
         final_k = final_k or self._settings.context_chunks
-        hits = active_retriever.search(query=question, top_k=candidate_k)
+        if self._settings.hyde_enabled:
+            hypothesis = self._expand_with_hyde(question)
+            hits = active_retriever.search(query=question, top_k=candidate_k, vector_query=hypothesis)
+        else:
+            hits = active_retriever.search(query=question, top_k=candidate_k)
         chunk_ids = [h.doc_id for h in hits]
         chunks_map = active_chunk_repo.get_chunks(chunk_ids)
+        missing_chunk_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunks_map]
 
         logger.info(
-            "rag_retrieval query=%s candidates=%s", question, len(chunk_ids)
+            "rag_retrieval query=%s candidates=%s resolved_chunks=%s missing_chunks=%s top_hit_ids=%s",
+            question,
+            len(chunk_ids),
+            len(chunks_map),
+            len(missing_chunk_ids),
+            chunk_ids[:10],
         )
 
         # 2. Second-stage: re-rank with cross-encoder if available
@@ -318,3 +344,18 @@ def _source_type_for_chunk(chunk) -> str:
     if source_id.startswith("web:") or breadcrumb == "web-search":
         return "web_cache"
     return "corpus"
+
+
+def _retrieval_method_for_chunk(chunk, found_by_map: dict) -> str:
+    source_id = str(getattr(chunk, "source_id", ""))
+    breadcrumb = str(getattr(chunk, "breadcrumb", ""))
+    if source_id.startswith("web:") or breadcrumb == "web-search":
+        return "web_cache"
+    fb: frozenset = found_by_map.get(getattr(chunk, "chunk_id", ""), frozenset())
+    if "bm25" in fb and "vector" in fb:
+        return "hybrid"
+    if "bm25" in fb:
+        return "bm25"
+    if "vector" in fb:
+        return "vector"
+    return "hybrid"

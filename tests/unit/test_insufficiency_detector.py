@@ -37,7 +37,7 @@ def test_insufficiency_no_results() -> None:
     detector = InsufficiencyDetector(settings=_settings())
     decision = detector.evaluate(query="python decorators", results=[])
     assert decision.needs_web_search is True
-    assert decision.confidence == 0.0
+    assert decision.sufficiency_confidence == 0.0
     assert decision.reasons == [InsufficiencyReason.NO_RESULTS]
     assert decision.metrics.num_results == 0
 

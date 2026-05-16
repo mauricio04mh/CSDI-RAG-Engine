@@ -47,3 +47,17 @@ def index_document(payload: VectorIndexDocumentRequest, request: Request) -> Vec
         indexed_documents=result.indexed_documents,
         persisted=result.persisted,
     )
+
+
+@router.delete("/{doc_id}", status_code=200)
+def delete_document(doc_id: str, request: Request) -> dict:
+    """Soft-delete a document from the vector index."""
+    builder: VectorIndexBuilder = request.app.state.vector_index_builder
+    try:
+        deleted = builder.remove_document(doc_id)
+    except Exception as exc:
+        logger.exception("vector_delete_failed doc_id=%s", doc_id)
+        raise HTTPException(status_code=500, detail="Vector delete failed.") from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
+    return {"status": "deleted", "doc_id": doc_id}

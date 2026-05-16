@@ -97,7 +97,8 @@ class ChunkIngestionService:
         tokens = tokenize(chunk.text)
         try:
             self._index_builder.add_document(doc_id=chunk.chunk_id, tokens=tokens)
-            self._vector_index_builder.add_document(doc_id=chunk.chunk_id, text=chunk.text)
+            embed_text = " | ".join(filter(None, [chunk.title, chunk.breadcrumb, chunk.text]))
+            self._vector_index_builder.add_document(doc_id=chunk.chunk_id, text=embed_text)
             return True
         except ValueError as exc:
             logger.warning("chunk_index_conflict chunk_id=%s reason=%s", chunk.chunk_id, exc)

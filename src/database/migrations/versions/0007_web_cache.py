@@ -1,7 +1,7 @@
 """web cache tables
 
-Revision ID: 0005
-Revises: 0004
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-05-16
 """
 from typing import Sequence, Union
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0005"
-down_revision: Union[str, None] = "0004"
+revision: str = "0007"
+down_revision: Union[str, None] = "0006"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -60,7 +60,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("doc_id"),
     )
-    op.execute("ALTER TABLE web_cache_vector_documents ALTER COLUMN embedding TYPE vector(384) USING embedding::vector(384)")
+    op.execute("ALTER TABLE web_cache_vector_documents ALTER COLUMN embedding TYPE vector(1024) USING embedding::vector(1024)")
     op.create_index("idx_web_cache_vector_documents_doc_id", "web_cache_vector_documents", ["doc_id"])
     op.execute(
         "CREATE INDEX idx_web_cache_vector_embedding_hnsw ON web_cache_vector_documents "

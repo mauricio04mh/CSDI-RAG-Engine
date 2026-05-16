@@ -23,6 +23,7 @@ def _generation_settings() -> GenerationSettings:
         reranker_enabled=False,
         reranker_model="",
         reranker_candidate_k=10,
+        hyde_enabled=False,
     )
 
 

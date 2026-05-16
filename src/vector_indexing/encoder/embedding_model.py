@@ -50,6 +50,10 @@ class EmbeddingModel:
         """Encode a single text and return its vector."""
         return self.encode([text])[0]
 
+    def encode_query(self, text: str, prefix: str = "") -> np.ndarray:
+        """Encode a query, optionally prepending an asymmetric retrieval prefix."""
+        return self.encode_one(f"{prefix}{text}" if prefix else text)
+
     def _get_model(self) -> SentenceTransformer:
         """Load the sentence-transformers model once."""
         if self._model is not None:

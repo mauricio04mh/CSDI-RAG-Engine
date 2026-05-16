@@ -17,6 +17,10 @@ class BM25SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, description="User query to score against the inverted index.")
     top_k: int = Field(default=20, ge=1, le=100, description="Maximum number of ranked hits to return.")
+    source_ids: list[str] | None = Field(
+        default=None,
+        description="If set, only return chunks from these source IDs. Result count may be less than top_k.",
+    )
 
 
 class BM25SearchResultItem(BaseModel):
@@ -53,6 +57,16 @@ def search_bm25(payload: BM25SearchRequest, request: Request) -> BM25SearchRespo
     doc_ids = [r.doc_id for r in results]
     chunks = chunk_repo.get_chunks(doc_ids)
     score_map = {r.doc_id: r.score for r in results}
+    missing_chunks = [doc_id for doc_id in doc_ids if doc_id not in chunks]
+    logger.info(
+        "bm25_search_trace query=%s requested_top_k=%s retrieved_hits=%s resolved_chunks=%s missing_chunks=%s top_ids=%s",
+        payload.query,
+        payload.top_k,
+        len(doc_ids),
+        len(chunks),
+        len(missing_chunks),
+        doc_ids[:10],
+    )
 
     enriched: list[BM25SearchResultItem] = []
     for doc_id in doc_ids:
@@ -68,5 +82,9 @@ def search_bm25(payload: BM25SearchRequest, request: Request) -> BM25SearchRespo
             breadcrumb=chunk.breadcrumb,
             text=chunk.text,
         ))
+
+    if payload.source_ids is not None:
+        sid_set = set(payload.source_ids)
+        enriched = [item for item in enriched if item.source_id in sid_set]
 
     return BM25SearchResponse(results=enriched)

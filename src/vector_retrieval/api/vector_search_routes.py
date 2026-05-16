@@ -15,6 +15,10 @@ router = APIRouter(prefix="/api/v1/vector", tags=["vector-retrieval"])
 class VectorSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural language query to embed and search.")
     top_k: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return.")
+    source_ids: list[str] | None = Field(
+        default=None,
+        description="If set, only return chunks from these source IDs. Result count may be less than top_k.",
+    )
 
 
 class VectorSearchResultItem(BaseModel):
@@ -62,5 +66,9 @@ def search_vector(payload: VectorSearchRequest, request: Request) -> VectorSearc
             breadcrumb=chunk.breadcrumb,
             text=chunk.text,
         ))
+
+    if payload.source_ids is not None:
+        sid_set = set(payload.source_ids)
+        enriched = [item for item in enriched if item.source_id in sid_set]
 
     return VectorSearchResponse(results=enriched)
