@@ -41,11 +41,13 @@ class VectorRepository:
             (doc_ids, vectors) where vectors[i] corresponds to doc_ids[i].
         """
         with Session(self.engine) as session:
-            rows = session.execute(
+            query = (
                 select(self.document_model.doc_id, self.document_model.embedding)
-                .where(self.document_model.deleted_at.is_(None))
                 .order_by(self.document_model.id.asc())
-            ).all()
+            )
+            if hasattr(self.document_model, "deleted_at"):
+                query = query.where(self.document_model.deleted_at.is_(None))
+            rows = session.execute(query).all()
 
         if not rows:
             return [], np.empty((0,), dtype=np.float32)
