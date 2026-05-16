@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.hybrid.fusion.rrf import reciprocal_rank_fusion
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class HybridResult:
     doc_id: str
     score: float
+    found_by: frozenset[str] = field(default_factory=frozenset)
 
 
 class HybridRetriever:
@@ -52,6 +53,8 @@ class HybridRetriever:
 
         bm25_ids = [r.doc_id for r in bm25_results]
         vector_ids = [r.doc_id for r in vector_results]
+        bm25_set = set(bm25_ids)
+        vector_set = set(vector_ids)
 
         fused = reciprocal_rank_fusion(
             [bm25_ids, vector_ids],
@@ -67,7 +70,15 @@ class HybridRetriever:
             self._vector_weight,
         )
 
-        return [HybridResult(doc_id=doc_id, score=score) for doc_id, score in fused[:top_k]]
+        results = []
+        for doc_id, score in fused[:top_k]:
+            found_by: set[str] = set()
+            if doc_id in bm25_set:
+                found_by.add("bm25")
+            if doc_id in vector_set:
+                found_by.add("vector")
+            results.append(HybridResult(doc_id=doc_id, score=score, found_by=frozenset(found_by)))
+        return results
 
     def update_weights(self, bm25_weight: float, vector_weight: float) -> None:
         """Hot-update the RRF fusion weights without restarting."""

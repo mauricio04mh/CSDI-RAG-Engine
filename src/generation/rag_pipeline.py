@@ -26,6 +26,7 @@ class RAGSource:
     url: str
     title: str
     source_type: str = "corpus"
+    retrieval_method: str = "hybrid"
 
 
 @dataclass(slots=True)
@@ -92,6 +93,7 @@ class RAGPipeline:
         external_search_executed = False
         external_indexed_count = 0
         final_chunks = chunks
+        final_hits = hits
 
         if self._insufficiency_detector:
             decision = self._evaluate_sufficiency(
@@ -166,18 +168,21 @@ class RAGPipeline:
                             question,
                         )
 
+                final_hits = combined_hits
                 final_chunks = self._select_prompt_chunks(
                     question=question,
                     hits=combined_hits,
                     chunks=combined_chunks,
                 )
 
+        found_by_map = {h.doc_id: getattr(h, "found_by", frozenset()) for h in final_hits}
         sources = [
             RAGSource(
                 chunk_id=c.chunk_id,
                 url=c.url,
                 title=c.title,
                 source_type=_source_type_for_chunk(c),
+                retrieval_method=_retrieval_method_for_chunk(c, found_by_map),
             )
             for c in final_chunks
         ]
@@ -339,3 +344,18 @@ def _source_type_for_chunk(chunk) -> str:
     if source_id.startswith("web:") or breadcrumb == "web-search":
         return "web_cache"
     return "corpus"
+
+
+def _retrieval_method_for_chunk(chunk, found_by_map: dict) -> str:
+    source_id = str(getattr(chunk, "source_id", ""))
+    breadcrumb = str(getattr(chunk, "breadcrumb", ""))
+    if source_id.startswith("web:") or breadcrumb == "web-search":
+        return "web_cache"
+    fb: frozenset = found_by_map.get(getattr(chunk, "chunk_id", ""), frozenset())
+    if "bm25" in fb and "vector" in fb:
+        return "hybrid"
+    if "bm25" in fb:
+        return "bm25"
+    if "vector" in fb:
+        return "vector"
+    return "hybrid"
