@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Integer, Text, func
+from sqlalchemy import Integer, TIMESTAMP, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from pgvector.sqlalchemy import Vector
@@ -15,8 +15,9 @@ class VectorDocument(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     doc_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
-    embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
     indexed_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)
+    deleted_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True, default=None)
 
 
 class VectorIndexMetadata(Base):

@@ -11,6 +11,7 @@ class VectorStore:
 
     vector_ids_to_doc_ids: list[str] = field(default_factory=list)
     doc_ids_to_vector_ids: dict[str, int] = field(default_factory=dict)
+    deleted_doc_ids: set[str] = field(default_factory=set)
 
     def add_documents(self, doc_ids: list[str]) -> list[int]:
         """Register document IDs in insertion order and return their vector IDs."""
@@ -23,6 +24,13 @@ class VectorStore:
             self.doc_ids_to_vector_ids[doc_id] = vector_id
             vector_ids.append(vector_id)
         return vector_ids
+
+    def mark_deleted(self, doc_id: str) -> None:
+        """Tombstone a document so searches skip it without rebuilding the index."""
+        self.deleted_doc_ids.add(doc_id)
+
+    def is_deleted(self, doc_id: str) -> bool:
+        return doc_id in self.deleted_doc_ids
 
     def get_doc_id(self, vector_id: int) -> str | None:
         """Resolve a FAISS vector ID back to a document ID."""

@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from src.database.models.vector_models import VectorDocument, VectorIndexMetadata
 
@@ -39,6 +40,7 @@ class VectorRepository:
         with Session(self.engine) as session:
             rows = session.execute(
                 select(VectorDocument.doc_id, VectorDocument.embedding)
+                .where(VectorDocument.deleted_at.is_(None))
                 .order_by(VectorDocument.id.asc())
             ).all()
 
@@ -96,6 +98,31 @@ class VectorRepository:
             "hnsw_ef_search": row.hnsw_ef_search,
             "vector_count": row.vector_count,
         }
+
+    def delete_document(self, doc_id: str) -> bool:
+        """Soft-delete a document by setting deleted_at. Returns True if found and marked."""
+        with Session(self.engine) as session:
+            with session.begin():
+                result = session.execute(
+                    update(VectorDocument)
+                    .where(VectorDocument.doc_id == doc_id)
+                    .where(VectorDocument.deleted_at.is_(None))
+                    .values(deleted_at=func.now())
+                )
+        deleted = result.rowcount == 1
+        if deleted:
+            logger.info("vector_document_soft_deleted doc_id=%s", doc_id)
+        return deleted
+
+    def load_all_doc_ids(self) -> list[str]:
+        """Load only doc_ids (no embeddings) for non-deleted documents, ordered by insertion."""
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(VectorDocument.doc_id)
+                .where(VectorDocument.deleted_at.is_(None))
+                .order_by(VectorDocument.id.asc())
+            ).all()
+        return [row.doc_id for row in rows]
 
     def doc_exists(self, doc_id: str) -> bool:
         """Return True if a document with this ID is already indexed."""

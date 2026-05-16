@@ -56,3 +56,25 @@ def test_add_documents_in_batches(store):
     assert len(store) == 4
     assert store.get_doc_id(2) == "doc_c"
     assert store.get_doc_id(3) == "doc_d"
+
+
+def test_mark_deleted_makes_is_deleted_true(store):
+    store.add_documents(["doc_a"])
+    store.mark_deleted("doc_a")
+    assert store.is_deleted("doc_a") is True
+
+
+def test_is_deleted_returns_false_for_unknown(store):
+    assert store.is_deleted("nonexistent") is False
+
+
+def test_is_deleted_returns_false_before_mark(store):
+    store.add_documents(["doc_a"])
+    assert store.is_deleted("doc_a") is False
+
+
+def test_mark_deleted_does_not_affect_other_docs(store):
+    store.add_documents(["doc_a", "doc_b"])
+    store.mark_deleted("doc_a")
+    assert store.is_deleted("doc_a") is True
+    assert store.is_deleted("doc_b") is False

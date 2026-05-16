@@ -30,17 +30,19 @@ class VectorRetriever:
         faiss_index: FaissIndex,
         vector_store: VectorStore,
         lock: threading.RLock,
+        query_prefix: str = "",
     ) -> None:
         self._embedding_model = embedding_model
         self._faiss_index = faiss_index
         self._vector_store = vector_store
         self._lock = lock
+        self._query_prefix = query_prefix
 
     def search(self, query: str, top_k: int) -> list[VectorResult]:
         if not query.strip():
             raise ValueError("Query must not be empty.")
 
-        query_vector = self._embedding_model.encode_one(query)
+        query_vector = self._embedding_model.encode_query(query, prefix=self._query_prefix)
 
         with self._lock:
             scores, vector_ids = self._faiss_index.search(query_vector, top_k)
@@ -49,7 +51,7 @@ class VectorRetriever:
                 if vid < 0:
                     continue  # FAISS pads unfilled slots with -1
                 doc_id = self._vector_store.get_doc_id(int(vid))
-                if doc_id is not None:
+                if doc_id is not None and not self._vector_store.is_deleted(doc_id):
                     results.append(VectorResult(doc_id=doc_id, score=float(score)))
 
         logger.info("vector_search_completed query_len=%s results=%s", len(query), len(results))
