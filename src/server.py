@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
         faiss_index=vector_index_builder.faiss_index,
         vector_store=vector_index_builder.vector_store,
         lock=vector_index_builder._lock,
+        query_prefix=vector_settings.query_prefix,
     )
     hybrid_retriever = HybridRetriever(
         bm25_retriever=bm25_retriever,
