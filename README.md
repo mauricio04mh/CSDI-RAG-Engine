@@ -25,6 +25,15 @@ Motor de búsqueda híbrida y RAG para documentación técnica. El proyecto comb
 docker compose up --build
 ```
 
+Para aprovechar cache de `pip` en el build (Docker BuildKit):
+
+```bash
+DOCKER_BUILDKIT=1 docker compose build --progress=plain
+docker compose up
+```
+
+Si el build falla con `exit code: 1`, usa `--progress=plain` para ver el error exacto del paquete que falló.
+
 3. Abre la API en:
 
 ```text
@@ -49,6 +58,8 @@ El proyecto usa Alembic para las migraciones. Antes de arrancar la app por prime
 ```bash
 alembic upgrade head
 ```
+
+Si usas `docker compose`, el servicio `app` ejecuta `alembic upgrade head` automáticamente al iniciar.
 
 Si usas Docker Compose, la inicialización de PostgreSQL activa la extensión `vector` mediante:
 

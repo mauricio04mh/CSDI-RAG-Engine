@@ -12,3 +12,8 @@ __pycache__
 .ruff_cache
 dist
 build
+.env
+*.xlsx
+*.jpeg
+*.jpg
+*.png
