@@ -8,28 +8,29 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.bm25.api.bm25_routes import router as bm25_router
+from src.bm25.config.settings import load_settings as load_bm25_settings
+from src.bm25.pipeline.bm25_retriever import BM25Retriever
 from src.config_api.api.routes import load_config_from_disk
 from src.config_api.api.routes import router as config_router
+from src.database.config import build_engine
+from src.database.repositories.chunk_repository import ChunkRepository
+from src.database.repositories.source_document_repository import SourceDocumentRepository
+from src.database.repositories.web_search_repository import WebSearchRepository
 from src.file_upload.api.routes import router as upload_router
 from src.generation.api.routes import router as rag_router
 from src.generation.config.settings import load_settings as load_generation_settings
 from src.generation.llm_client import LLMClient
 from src.generation.rag_pipeline import RAGPipeline
-from src.metrics.api.routes import router as metrics_router
-from src.reranker.cross_encoder_reranker import CrossEncoderReranker
-from src.bm25.config.settings import load_settings as load_bm25_settings
-from src.bm25.pipeline.bm25_retriever import BM25Retriever
-from src.database.config import build_engine
-from src.database.repositories.chunk_repository import ChunkRepository
-from src.database.repositories.web_search_repository import WebSearchRepository
 from src.hybrid.api.routes import router as search_router
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
 from src.ingestion.chunk_ingestion_service import ChunkIngestionService
 from src.indexing.api.routes import router as indexing_router
 from src.indexing.builder.index_builder import IndexBuilder
 from src.indexing.config.settings import load_settings as load_indexing_settings
+from src.metrics.api.routes import router as metrics_router
 from src.orchestrator.api.routes import router as ingestion_router
 from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
+from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 from src.sources_config.source_config_repository import SourceConfigRepository
 from src.vector_indexing.api.routes import router as vector_indexing_router
 from src.vector_indexing.config.settings import load_settings as load_vector_settings
@@ -77,8 +78,10 @@ def create_app() -> FastAPI:
         bm25_weight=float(os.getenv("HYBRID_BM25_WEIGHT", "0.3")),
         vector_weight=float(os.getenv("HYBRID_VECTOR_WEIGHT", "0.7")),
     )
+
     source_repo = SourceConfigRepository()
     chunk_repo = ChunkRepository(engine)
+    source_document_repo = SourceDocumentRepository(engine)
     chunk_ingestion_service = ChunkIngestionService(
         chunk_repo=chunk_repo,
         index_builder=index_builder,
@@ -88,7 +91,9 @@ def create_app() -> FastAPI:
     ingestion_orchestrator = IngestionOrchestrator(
         source_repo=source_repo,
         chunk_ingestion=chunk_ingestion_service,
+        source_document_repo=source_document_repo,
     )
+
     llm_client = LLMClient(
         base_url=generation_settings.base_url,
         api_key=generation_settings.api_key,
@@ -124,7 +129,6 @@ def create_app() -> FastAPI:
         web_search_orchestrator=web_search_orchestrator,
     )
 
-    # Apply any persisted config overrides on top of env-var defaults
     _persisted_config = load_config_from_disk()
     if "bm25_weight" in _persisted_config and "vector_weight" in _persisted_config:
         hybrid_retriever.update_weights(
@@ -157,6 +161,7 @@ def create_app() -> FastAPI:
         app.state.hybrid_retriever = hybrid_retriever
         app.state.source_repo = source_repo
         app.state.chunk_repo = chunk_repo
+        app.state.source_document_repo = source_document_repo
         app.state.chunk_ingestion_service = chunk_ingestion_service
         app.state.ingestion_orchestrator = ingestion_orchestrator
         app.state.rag_pipeline = rag_pipeline
