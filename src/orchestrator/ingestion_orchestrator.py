@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from src.crawler.crawler import Crawler
 from src.document_processing.chunker import Chunker
 from src.ingestion.chunk_ingestion_service import ChunkIngestionService
+from src.ingestion.pipeline_services import (
+    ChunkIndexingStageService,
+    ChunkPreparationService,
+    CrawlStageService,
+    ScrapeStageService,
+    SourceDocumentPersistenceService,
+)
 from src.scraper.scraper import Scraper
 from src.sources_config.source_config_repository import SourceConfigRepository
 
@@ -22,59 +29,61 @@ class IngestionReport:
 
 
 class IngestionOrchestrator:
-    """Coordinates the full ingestion pipeline for one source:
+    """Coordinates the full ingestion pipeline for one source.
 
-        Crawler → Scraper → Chunker → IndexBuilder + VectorIndexBuilder
+    Stages:
+        crawl -> scrape -> persist source document -> build chunks -> index chunks
     """
 
     def __init__(
         self,
         source_repo: SourceConfigRepository,
         chunk_ingestion: ChunkIngestionService,
+        source_document_repo=None,
         chunk_size: int = 256,
         chunk_overlap: int = 32,
         crawler_timeout: float = 15.0,
     ) -> None:
         self._source_repo = source_repo
-        self._chunk_ingestion = chunk_ingestion
-        self._crawler = Crawler(timeout=crawler_timeout)
-        self._scraper = Scraper()
-        self._chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        crawler = Crawler(timeout=crawler_timeout)
+        scraper = Scraper()
+        chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+        self._crawl_service = CrawlStageService(crawler)
+        self._scrape_service = ScrapeStageService(scraper)
+        self._source_document_service = SourceDocumentPersistenceService(source_document_repo)
+        self._chunk_preparation_service = ChunkPreparationService(chunker)
+        self._chunk_indexing_service = ChunkIndexingStageService(chunk_ingestion)
 
     def ingest(self, source_id: str) -> IngestionReport:
         """Run the full pipeline for a source and return a summary report."""
         source = self._source_repo.get_source(source_id)
         logger.info("ingestion_started source=%s", source_id)
 
-        # 1. Crawl
-        crawl_result = self._crawler.crawl(source)
+        crawl_result = self._crawl_service.crawl(source)
         logger.info("crawl_done source=%s pages=%s", source_id, crawl_result.total)
 
-        # 2. Scrape + chunk + index
         pages_scraped = 0
         chunks_produced = 0
         chunks_indexed = 0
 
         for page in crawl_result.pages:
-            doc = self._scraper.parse(
-                url=page.url,
-                html=page.html,
-                config=source.scraper,
-                source_id=source_id,
-            )
+            doc = self._scrape_service.scrape_page(page=page, source=source)
             if doc is None:
                 continue
 
             pages_scraped += 1
-            chunks = self._chunker.chunk(
-                source_id=source_id,
-                url=doc.url,
-                title=doc.title,
-                breadcrumb=doc.breadcrumb,
-                content=doc.content,
-            )
+            document_id = self._source_document_service.persist(page=page, doc=doc)
+            if document_id is not None:
+                logger.debug(
+                    "source_document_persisted source=%s document_id=%s",
+                    doc.source_id,
+                    document_id,
+                )
+
+            chunks = self._chunk_preparation_service.build_chunks(doc)
             chunks_produced += len(chunks)
-            ingestion_result = self._chunk_ingestion.ingest_chunks(chunks)
+            ingestion_result = self._chunk_indexing_service.ingest(chunks)
             chunks_indexed += ingestion_result.indexed_chunks
             if ingestion_result.new_chunks == 0:
                 logger.debug("page_all_chunks_exist url=%s skipping=%s", doc.url, len(chunks))
@@ -86,8 +95,7 @@ class IngestionOrchestrator:
                     ingestion_result.skipped_existing,
                 )
 
-        # Flush any vectors remaining in the batch buffer (last partial batch)
-        flushed = self._chunk_ingestion.finalize(reload_bm25=False).vector_flushed
+        flushed = self._chunk_indexing_service.finalize(reload_bm25=False).vector_flushed
         if flushed:
             logger.debug("vector_buffer_flushed count=%s", flushed)
 

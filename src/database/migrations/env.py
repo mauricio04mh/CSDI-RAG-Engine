@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from src.database.models.bm25_models import Base as BM25Base
 from src.database.models.chunk_models import Base as ChunkBase
+from src.database.models.source_document_models import Base as SourceDocumentBase
 from src.database.models.vector_models import Base as VectorBase
 
 config = context.config
@@ -15,7 +16,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = [BM25Base.metadata, VectorBase.metadata, ChunkBase.metadata]
+target_metadata = [
+    BM25Base.metadata,
+    VectorBase.metadata,
+    ChunkBase.metadata,
+    SourceDocumentBase.metadata,
+]
 
 _DEFAULT_URL = "postgresql://raguser:ragpassword@localhost:5432/ragengine"
 
