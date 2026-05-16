@@ -71,3 +71,15 @@ class ChunkRepository:
             return session.execute(
                 select(func.count()).select_from(Chunk)
             ).scalar_one()
+
+    def count_by_source_ids(self, source_ids: list[str]) -> dict[str, int]:
+        """Return chunk counts grouped by source_id for the given IDs."""
+        if not source_ids:
+            return {}
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(Chunk.source_id, func.count().label("count"))
+                .where(Chunk.source_id.in_(source_ids))
+                .group_by(Chunk.source_id)
+            ).all()
+        return {row.source_id: int(row.count) for row in rows}

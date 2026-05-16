@@ -80,3 +80,12 @@ class LLMClient:
         logger.info(
             "llm_settings_updated model=%s temperature=%.2f", model, temperature
         )
+
+    def update_connection(self, base_url: str, api_key: str) -> None:
+        """Hot-update provider connection settings without restarting."""
+        self._base_url = base_url.rstrip("/")
+        self._headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        logger.info("llm_connection_updated base_url=%s", self._base_url)

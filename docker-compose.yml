@@ -10,12 +10,16 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql://raguser:ragpassword@postgres:5432/ragengine
+      REDIS_URL: redis://redis:6379/0
+      AUTO_INGEST_ON_START: ${AUTO_INGEST_ON_START:-true}
       PYTHONPATH: /app
     volumes:
       - ./:/app
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8888 --reload"
 
   postgres:
@@ -36,6 +40,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: csdi-rag-engine-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
 
 volumes:
   postgres_data:
