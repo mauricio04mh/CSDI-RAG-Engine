@@ -31,13 +31,19 @@ class VectorIndexBuilder:
     database on startup and used for fast ANN search at query time.
     """
 
-    def __init__(self, settings: VectorSettings, engine: Engine) -> None:
+    def __init__(
+        self,
+        settings: VectorSettings,
+        engine: Engine,
+        vector_repo: VectorRepository | None = None,
+        embedding_model: EmbeddingModel | None = None,
+    ) -> None:
         self.settings = settings
-        self.embedding_model = EmbeddingModel(
+        self.embedding_model = embedding_model or EmbeddingModel(
             model_name=settings.embedding_model,
             expected_dimension=settings.vector_dimension,
         )
-        self._vector_repo = VectorRepository(engine)
+        self._vector_repo = vector_repo or VectorRepository(engine)
         self.vector_store = VectorStore()
         self.faiss_index = FaissIndex(
             dimension=settings.vector_dimension,
@@ -57,14 +63,16 @@ class VectorIndexBuilder:
             logger.info("vector_index_initialized empty=true")
             return
 
-        self.vector_store = VectorStore()
-        self.faiss_index = FaissIndex(
+        self.vector_store.vector_ids_to_doc_ids = []
+        self.vector_store.doc_ids_to_vector_ids = {}
+        new_faiss_index = FaissIndex(
             dimension=self.settings.vector_dimension,
             index_type=self.settings.faiss_index_type,
             hnsw_m=self.settings.hnsw_m,
             ef_construction=self.settings.hnsw_ef_construction,
             ef_search=self.settings.hnsw_ef_search,
         )
+        self.faiss_index._index = new_faiss_index.index
         # Load in batches to avoid memory spikes on large corpora
         batch_size = 1000
         for i in range(0, len(doc_ids), batch_size):
