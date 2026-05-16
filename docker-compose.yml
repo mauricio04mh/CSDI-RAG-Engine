@@ -11,7 +11,6 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql://raguser:ragpassword@postgres:5432/ragengine
       REDIS_URL: redis://redis:6379/0
-      AUTO_INGEST_ON_START: ${AUTO_INGEST_ON_START:-true}
       PYTHONPATH: /app
     volumes:
       - ./:/app
