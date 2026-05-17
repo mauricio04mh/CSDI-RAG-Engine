@@ -43,15 +43,17 @@ ENV_DEFAULTS: dict[str, str] = {
     # Diversity
     "INSUFF_MIN_SOURCE_DIVERSITY": "0.30",
     # Confidence decision
-    "INSUFF_CONFIDENCE_THRESHOLD": "0.55",
+    "INSUFF_CONFIDENCE_THRESHOLD": "0.65",
     # Feature computation limits
     "INSUFF_COVERAGE_TOP_N": "5",
     # Metric weights (must sum to 1.0)
-    "INSUFF_W_TOP": "0.25",
+    # W_TOP reduced: retrieval score != answer quality (high scores for topic-matched but non-answering docs)
+    # W_COVERAGE/W_ANSWERABILITY raised: better proxies for whether chunks actually answer the query
+    "INSUFF_W_TOP": "0.10",
     "INSUFF_W_QUANTITY": "0.15",
-    "INSUFF_W_COVERAGE": "0.25",
-    "INSUFF_W_DIVERSITY": "0.20",
-    "INSUFF_W_ANSWERABILITY": "0.15",
+    "INSUFF_W_COVERAGE": "0.35",
+    "INSUFF_W_DIVERSITY": "0.15",
+    "INSUFF_W_ANSWERABILITY": "0.25",
 }
 
 
