@@ -82,7 +82,7 @@ def _available_models(provider: str) -> list[str]:
 
 
 class InsuffConfig(BaseModel):
-    confidence_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    confidence_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     min_results: int = Field(default=5, ge=1)
     expected_results: int = Field(default=10, ge=1)
     min_top_score: float = Field(default=0.35, ge=0.0, le=1.0)
@@ -91,11 +91,11 @@ class InsuffConfig(BaseModel):
     min_answerability_score: float = Field(default=0.40, ge=0.0, le=1.0)
     min_source_diversity: float = Field(default=0.30, ge=0.0, le=1.0)
     coverage_top_n: int = Field(default=5, ge=1)
-    w_top: float = Field(default=0.25, ge=0.0, le=1.0)
+    w_top: float = Field(default=0.10, ge=0.0, le=1.0)
     w_quantity: float = Field(default=0.15, ge=0.0, le=1.0)
-    w_coverage: float = Field(default=0.25, ge=0.0, le=1.0)
-    w_diversity: float = Field(default=0.20, ge=0.0, le=1.0)
-    w_answerability: float = Field(default=0.15, ge=0.0, le=1.0)
+    w_coverage: float = Field(default=0.35, ge=0.0, le=1.0)
+    w_diversity: float = Field(default=0.15, ge=0.0, le=1.0)
+    w_answerability: float = Field(default=0.25, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def weights_must_sum_to_one(self) -> "InsuffConfig":
