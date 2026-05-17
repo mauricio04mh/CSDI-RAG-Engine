@@ -36,6 +36,46 @@ class SearchResponse(BaseModel):
     results: list[SearchResultItem]
 
 
+@router.post("/search/web-cache", response_model=SearchResponse)
+def search_web_cache(payload: SearchRequest, request: Request) -> SearchResponse:
+    """Hybrid search restricted to the web-cache index (results from previous web searches)."""
+    retriever: HybridRetriever = request.app.state.web_cache_hybrid_retriever
+    chunk_repo: ChunkRepository = request.app.state.web_cache_chunk_repo
+
+    try:
+        hits = retriever.search(query=payload.query, top_k=payload.top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("web_cache_search_failed query=%s", payload.query)
+        raise HTTPException(status_code=500, detail="Search failed.") from exc
+
+    chunk_ids = [h.doc_id for h in hits]
+    chunks = chunk_repo.get_chunks(chunk_ids)
+    score_map = {h.doc_id: h.score for h in hits}
+
+    results: list[SearchResultItem] = []
+    for chunk_id in chunk_ids:
+        chunk = chunks.get(chunk_id)
+        if chunk is None:
+            continue
+        results.append(SearchResultItem(
+            chunk_id=chunk_id,
+            score=score_map[chunk_id],
+            source_id=chunk.source_id,
+            url=chunk.url,
+            title=chunk.title,
+            breadcrumb=chunk.breadcrumb,
+            text=chunk.text,
+        ))
+
+    if payload.source_ids is not None:
+        sid_set = set(payload.source_ids)
+        results = [item for item in results if item.source_id in sid_set]
+
+    return SearchResponse(query=payload.query, results=results)
+
+
 @router.post("/search", response_model=SearchResponse)
 def search(payload: SearchRequest, request: Request) -> SearchResponse:
     """Hybrid BM25 + dense vector search fused with Reciprocal Rank Fusion."""
