@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import replace as dc_replace
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
@@ -11,6 +12,7 @@ from src.generation.llm_client import LLMClient
 from src.generation.rag_pipeline import RAGPipeline
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
 from src.reranker.cross_encoder_reranker import CrossEncoderReranker
+from src.web_search.insufficiency_detector.detector import InsufficiencyDetector
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["config"])
@@ -79,16 +81,45 @@ def _available_models(provider: str) -> list[str]:
     return []
 
 
+class InsuffConfig(BaseModel):
+    confidence_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    min_results: int = Field(default=5, ge=1)
+    expected_results: int = Field(default=10, ge=1)
+    min_top_score: float = Field(default=0.35, ge=0.0, le=1.0)
+    min_relevant_results: int = Field(default=2, ge=1)
+    min_coverage_score: float = Field(default=0.20, ge=0.0, le=1.0)
+    min_answerability_score: float = Field(default=0.40, ge=0.0, le=1.0)
+    min_source_diversity: float = Field(default=0.30, ge=0.0, le=1.0)
+    coverage_top_n: int = Field(default=5, ge=1)
+    w_top: float = Field(default=0.25, ge=0.0, le=1.0)
+    w_quantity: float = Field(default=0.15, ge=0.0, le=1.0)
+    w_coverage: float = Field(default=0.25, ge=0.0, le=1.0)
+    w_diversity: float = Field(default=0.20, ge=0.0, le=1.0)
+    w_answerability: float = Field(default=0.15, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def weights_must_sum_to_one(self) -> "InsuffConfig":
+        total = self.w_top + self.w_quantity + self.w_coverage + self.w_diversity + self.w_answerability
+        if abs(total - 1.0) > 1e-4:
+            raise ValueError(f"Insufficiency weights must sum to 1.0 (got {total:.4f})")
+        return self
+
+
 class PipelineConfig(BaseModel):
     bm25_weight: float = Field(..., ge=0.0, le=1.0)
     vector_weight: float = Field(..., ge=0.0, le=1.0)
     temperature: float = Field(..., ge=0.0, le=2.0)
     model: str = Field(..., min_length=1)
     reranker_enabled: bool
+    reranker_candidate_k: int = Field(default=30, ge=1)
+    context_chunks: int = Field(default=15, ge=1, le=50)
+    max_tokens: int = Field(default=1024, ge=64, le=8192)
+    hyde_enabled: bool = False
     llm_base_url: str = Field(..., min_length=1)
     llm_api_key: str = Field(default="")
     provider: str = Field(default="custom")
     available_models: list[str] = Field(default_factory=list)
+    insuff: InsuffConfig = Field(default_factory=InsuffConfig)
 
     @model_validator(mode="after")
     def weights_must_sum_to_one(self) -> "PipelineConfig":
@@ -103,8 +134,13 @@ class PipelineConfigUpdate(BaseModel):
     temperature: float = Field(..., ge=0.0, le=2.0)
     model: str = Field(..., min_length=1)
     reranker_enabled: bool
+    reranker_candidate_k: int = Field(default=30, ge=1)
+    context_chunks: int = Field(default=15, ge=1, le=50)
+    max_tokens: int = Field(default=1024, ge=64, le=8192)
+    hyde_enabled: bool = False
     llm_base_url: str = Field(..., min_length=1)
     llm_api_key: str = Field(default="")
+    insuff: InsuffConfig = Field(default_factory=InsuffConfig)
 
     @model_validator(mode="after")
     def weights_must_sum_to_one(self) -> "PipelineConfigUpdate":
@@ -122,6 +158,28 @@ def get_config(request: Request) -> PipelineConfig:
     base_url = llm_client._base_url
     api_key = llm_client._headers.get("Authorization", "").replace("Bearer ", "")
     provider = _provider_name(base_url)
+    s = rag_pipeline._settings
+
+    insuff_cfg = InsuffConfig()
+    detector: InsufficiencyDetector | None = rag_pipeline._insufficiency_detector
+    if detector is not None:
+        ds = detector.settings
+        insuff_cfg = InsuffConfig(
+            confidence_threshold=ds.confidence_threshold,
+            min_results=ds.min_results,
+            expected_results=ds.expected_results,
+            min_top_score=ds.min_top_score,
+            min_relevant_results=ds.min_relevant_results,
+            min_coverage_score=ds.min_coverage_score,
+            min_answerability_score=ds.min_answerability_score,
+            min_source_diversity=ds.min_source_diversity,
+            coverage_top_n=ds.coverage_top_n,
+            w_top=ds.w_top,
+            w_quantity=ds.w_quantity,
+            w_coverage=ds.w_coverage,
+            w_diversity=ds.w_diversity,
+            w_answerability=ds.w_answerability,
+        )
 
     return PipelineConfig(
         bm25_weight=hybrid_retriever._bm25_weight,
@@ -129,10 +187,15 @@ def get_config(request: Request) -> PipelineConfig:
         temperature=llm_client._temperature,
         model=llm_client._model,
         reranker_enabled=rag_pipeline._reranker is not None,
+        reranker_candidate_k=s.reranker_candidate_k,
+        context_chunks=s.context_chunks,
+        max_tokens=llm_client._max_tokens,
+        hyde_enabled=s.hyde_enabled,
         llm_base_url=base_url,
         llm_api_key=api_key,
         provider=provider,
         available_models=_available_models(provider),
+        insuff=insuff_cfg,
     )
 
 
@@ -151,6 +214,7 @@ def update_config(payload: PipelineConfigUpdate, request: Request) -> PipelineCo
         llm_client.update_settings(
             model=payload.model,
             temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
         )
         llm_client.update_connection(
             base_url=payload.llm_base_url,
@@ -164,16 +228,55 @@ def update_config(payload: PipelineConfigUpdate, request: Request) -> PipelineCo
         elif not payload.reranker_enabled and currently_enabled:
             logger.info("reranker_disabling")
             rag_pipeline._reranker = None
+
+        rag_pipeline._settings = dc_replace(
+            rag_pipeline._settings,
+            context_chunks=payload.context_chunks,
+            reranker_candidate_k=payload.reranker_candidate_k,
+            hyde_enabled=payload.hyde_enabled,
+        )
+
+        detector: InsufficiencyDetector | None = rag_pipeline._insufficiency_detector
+        if detector is not None:
+            ic = payload.insuff
+            detector.settings = dc_replace(
+                detector.settings,
+                confidence_threshold=ic.confidence_threshold,
+                min_results=ic.min_results,
+                expected_results=ic.expected_results,
+                min_top_score=ic.min_top_score,
+                min_relevant_results=ic.min_relevant_results,
+                min_coverage_score=ic.min_coverage_score,
+                min_answerability_score=ic.min_answerability_score,
+                min_source_diversity=ic.min_source_diversity,
+                coverage_top_n=ic.coverage_top_n,
+                w_top=ic.w_top,
+                w_quantity=ic.w_quantity,
+                w_coverage=ic.w_coverage,
+                w_diversity=ic.w_diversity,
+                w_answerability=ic.w_answerability,
+            )
     except Exception as exc:
         logger.exception("config_update_failed")
         raise HTTPException(status_code=500, detail=f"Config update failed: {exc}") from exc
 
-    persist_payload = payload.model_dump()
-    _persist_config(persist_payload)
+    _persist_config(payload.model_dump())
 
     provider = _provider_name(payload.llm_base_url)
+    s = rag_pipeline._settings
     return PipelineConfig(
-        **persist_payload,
+        bm25_weight=payload.bm25_weight,
+        vector_weight=payload.vector_weight,
+        temperature=payload.temperature,
+        model=payload.model,
+        reranker_enabled=payload.reranker_enabled,
+        reranker_candidate_k=s.reranker_candidate_k,
+        context_chunks=s.context_chunks,
+        max_tokens=llm_client._max_tokens,
+        hyde_enabled=s.hyde_enabled,
+        llm_base_url=payload.llm_base_url,
+        llm_api_key=payload.llm_api_key,
         provider=provider,
         available_models=_available_models(provider),
+        insuff=payload.insuff,
     )

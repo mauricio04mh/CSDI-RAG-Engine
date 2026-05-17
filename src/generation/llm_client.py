@@ -73,12 +73,14 @@ class LLMClient:
             completion_tokens=usage.get("completion_tokens", 0),
         )
 
-    def update_settings(self, model: str, temperature: float) -> None:
+    def update_settings(self, model: str, temperature: float, max_tokens: int | None = None) -> None:
         """Hot-update model and temperature without restarting."""
         self._model = model
         self._temperature = temperature
+        if max_tokens is not None:
+            self._max_tokens = max_tokens
         logger.info(
-            "llm_settings_updated model=%s temperature=%.2f", model, temperature
+            "llm_settings_updated model=%s temperature=%.2f max_tokens=%s", model, temperature, self._max_tokens
         )
 
     def update_connection(self, base_url: str, api_key: str) -> None:
