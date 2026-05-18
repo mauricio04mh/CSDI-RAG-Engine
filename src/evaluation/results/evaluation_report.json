@@ -1,0 +1,86 @@
+{
+  "k": 5,
+  "strategies": {
+    "bm25": {
+      "k": 5,
+      "evaluated_queries": 2,
+      "per_query": {
+        "q1": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "q2": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      },
+      "averages": {
+        "precision_at_k": 0.0,
+        "recall_at_k": 0.0,
+        "f1_at_k": 0.0,
+        "reciprocal_rank": 0.0,
+        "ndcg_at_k": 0.0
+      }
+    },
+    "vector": {
+      "k": 5,
+      "evaluated_queries": 2,
+      "per_query": {
+        "q1": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "q2": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      },
+      "averages": {
+        "precision_at_k": 0.0,
+        "recall_at_k": 0.0,
+        "f1_at_k": 0.0,
+        "reciprocal_rank": 0.0,
+        "ndcg_at_k": 0.0
+      }
+    },
+    "hybrid": {
+      "k": 5,
+      "evaluated_queries": 2,
+      "per_query": {
+        "q1": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "q2": {
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "f1_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      },
+      "averages": {
+        "precision_at_k": 0.0,
+        "recall_at_k": 0.0,
+        "f1_at_k": 0.0,
+        "reciprocal_rank": 0.0,
+        "ndcg_at_k": 0.0
+      }
+    }
+  }
+}
