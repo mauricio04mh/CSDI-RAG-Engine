@@ -22,7 +22,6 @@ class SourceConfig:
     allowed_path_prefixes: list[str]
     blocked_path_patterns: list[str]
     max_depth: int
-    use_browser_fallback: bool
     technology: list[str]
     respect_robots: bool = True
     user_agent: str = _DEFAULT_USER_AGENT

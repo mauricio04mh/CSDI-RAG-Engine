@@ -45,8 +45,5 @@ class SourceConfigRepository:
     def get_max_depth(self, source_id: str) -> int:
         return self.get_source(source_id).max_depth
 
-    def use_browser_fallback(self, source_id: str) -> bool:
-        return self.get_source(source_id).use_browser_fallback
-
     def get_scraper_config(self, source_id: str) -> ScraperConfig:
         return self.get_source(source_id).scraper
