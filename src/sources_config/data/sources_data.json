@@ -22,7 +22,6 @@
       "/py-modindex"
     ],
     "max_depth": 2,
-    "use_browser_fallback": false,
     "technology": ["python"],
     "respect_robots": true,
     "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
@@ -93,7 +92,6 @@
       "/search"
     ],
     "max_depth": 1,
-    "use_browser_fallback": true,
     "technology": ["javascript", "web"],
     "respect_robots": true,
     "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",

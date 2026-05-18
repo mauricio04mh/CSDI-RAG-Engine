@@ -47,7 +47,6 @@ def make_source(
         allowed_path_prefixes=allowed_path_prefixes or ["/docs/"],
         blocked_path_patterns=blocked_path_patterns or ["/search.html"],
         max_depth=max_depth,
-        use_browser_fallback=False,
         technology=["python"],
         respect_robots=respect_robots,
         crawl_delay_seconds=crawl_delay_seconds,
