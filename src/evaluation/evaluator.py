@@ -17,6 +17,8 @@ from src.evaluation.metrics import (
 MetricResults = dict[str, float]
 QueryRankings = dict[str, list[str]]
 QueryRelevanceJudgments = dict[str, dict[str, int | float]]
+StrategyRankings = dict[str, QueryRankings]
+StrategyEvaluation = dict[str, int | MetricResults | dict[str, MetricResults]]
 
 METRIC_NAMES = (
     "precision_at_k",
@@ -46,7 +48,7 @@ def evaluate_strategy(
     rankings_by_query: QueryRankings,
     qrels: QueryRelevanceJudgments,
     k: int = 5,
-) -> dict[str, int | MetricResults | dict[str, MetricResults]]:
+) -> StrategyEvaluation:
     """Evaluate a strategy's ranked results and average metrics by query."""
     per_query: dict[str, MetricResults] = {}
 
@@ -62,6 +64,21 @@ def evaluate_strategy(
         "evaluated_queries": len(per_query),
         "per_query": per_query,
         "averages": _average_metrics(per_query),
+    }
+
+
+def evaluate_all_strategies(
+    rankings_by_strategy: StrategyRankings,
+    qrels: QueryRelevanceJudgments,
+    k: int = 5,
+) -> dict[str, int | dict[str, StrategyEvaluation]]:
+    """Evaluate multiple retrieval strategies against the same qrels."""
+    return {
+        "k": k,
+        "strategies": {
+            strategy_name: evaluate_strategy(rankings_by_query, qrels, k)
+            for strategy_name, rankings_by_query in rankings_by_strategy.items()
+        },
     }
 
 

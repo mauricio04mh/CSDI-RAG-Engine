@@ -36,6 +36,27 @@ def load_qrels(path: str | Path) -> dict[str, dict[str, int | float]]:
     return qrels
 
 
+def load_rankings(path: str | Path) -> dict[str, dict[str, list[str]]]:
+    """Load and validate precomputed rankings grouped by strategy."""
+    data = _load_json(path)
+    if not isinstance(data, dict):
+        raise ValueError("rankings JSON must be an object")
+
+    rankings: dict[str, dict[str, list[str]]] = {}
+    for strategy_name, rankings_by_query in data.items():
+        if not _is_non_empty_string(strategy_name):
+            raise ValueError("ranking strategy names must be non-empty strings")
+        if not isinstance(rankings_by_query, dict):
+            raise ValueError(f"rankings for strategy '{strategy_name}' must be an object")
+
+        rankings[strategy_name] = _parse_strategy_rankings(
+            strategy_name,
+            rankings_by_query,
+        )
+
+    return rankings
+
+
 def _load_json(path: str | Path) -> Any:
     with Path(path).open(encoding="utf-8") as file:
         return json.load(file)
@@ -81,12 +102,39 @@ def _parse_query_judgments(
     return parsed
 
 
+def _parse_strategy_rankings(
+    strategy_name: str,
+    rankings_by_query: dict[Any, Any],
+) -> dict[str, list[str]]:
+    parsed: dict[str, list[str]] = {}
+
+    for query_id, ranking in rankings_by_query.items():
+        if not _is_non_empty_string(query_id):
+            raise ValueError(
+                f"ranking query IDs for strategy '{strategy_name}' "
+                "must be non-empty strings"
+            )
+        if not _is_non_empty_string_list(ranking):
+            raise ValueError(
+                f"ranking for strategy '{strategy_name}', query '{query_id}' "
+                "must be a list of non-empty strings"
+            )
+
+        parsed[query_id] = ranking
+
+    return parsed
+
+
 def _is_non_empty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
 def _is_string_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_non_empty_string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(_is_non_empty_string(item) for item in value)
 
 
 def _is_numeric_relevance(value: Any) -> bool:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.evaluation.dataset_loader import load_qrels, load_queries
+from src.evaluation.dataset_loader import load_qrels, load_queries, load_rankings
 
 
 def test_load_queries_loads_valid_queries(tmp_path: Path):
@@ -132,6 +132,62 @@ def test_load_qrels_rejects_empty_query_ids_or_empty_document_ids(
 
     with pytest.raises(ValueError, match="non-empty strings"):
         load_qrels(path)
+
+
+def test_load_rankings_loads_valid_rankings(tmp_path: Path):
+    rankings = {
+        "bm25": {"q1": ["doc-1", "doc-2"], "q2": ["doc-3"]},
+        "vector": {"q1": ["doc-2", "doc-1"]},
+    }
+    path = _write_json(tmp_path, "rankings.json", rankings)
+
+    assert load_rankings(path) == rankings
+
+
+def test_load_rankings_rejects_non_dict_json(tmp_path: Path):
+    path = _write_json(tmp_path, "rankings.json", ["bm25"])
+
+    with pytest.raises(ValueError, match="rankings JSON must be an object"):
+        load_rankings(path)
+
+
+def test_load_rankings_rejects_empty_strategy_names(tmp_path: Path):
+    path = _write_json(tmp_path, "rankings.json", {"": {"q1": ["doc-1"]}})
+
+    with pytest.raises(ValueError, match="strategy names must be non-empty strings"):
+        load_rankings(path)
+
+
+def test_load_rankings_rejects_strategy_values_that_are_not_dicts(tmp_path: Path):
+    path = _write_json(tmp_path, "rankings.json", {"bm25": ["doc-1"]})
+
+    with pytest.raises(ValueError, match="strategy 'bm25' must be an object"):
+        load_rankings(path)
+
+
+def test_load_rankings_rejects_empty_query_ids(tmp_path: Path):
+    path = _write_json(tmp_path, "rankings.json", {"bm25": {"": ["doc-1"]}})
+
+    with pytest.raises(ValueError, match="query IDs .* must be non-empty strings"):
+        load_rankings(path)
+
+
+@pytest.mark.parametrize(
+    "ranking",
+    [
+        "doc-1",
+        ["doc-1", ""],
+        ["doc-1", 2],
+    ],
+)
+def test_load_rankings_rejects_rankings_that_are_not_lists_of_non_empty_strings(
+    tmp_path: Path,
+    ranking: object,
+):
+    path = _write_json(tmp_path, "rankings.json", {"bm25": {"q1": ranking}})
+
+    with pytest.raises(ValueError, match="list of non-empty strings"):
+        load_rankings(path)
 
 
 def _write_json(tmp_path: Path, filename: str, data: object) -> Path:

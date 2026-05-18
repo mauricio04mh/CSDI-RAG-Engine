@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.evaluation.evaluator import evaluate_query, evaluate_strategy
+from src.evaluation.evaluator import (
+    evaluate_all_strategies,
+    evaluate_query,
+    evaluate_strategy,
+)
 
 
 def test_evaluate_query_returns_all_expected_metrics():
@@ -87,3 +91,49 @@ def test_evaluate_strategy_returns_zero_averages_when_no_queries_are_evaluated()
         "reciprocal_rank": 0.0,
         "ndcg_at_k": 0.0,
     }
+
+
+def test_evaluate_all_strategies_evaluates_multiple_strategies():
+    rankings_by_strategy = {
+        "bm25": {"q1": ["doc-1", "doc-2"]},
+        "vector": {"q1": ["doc-2", "doc-1"]},
+    }
+    qrels = {"q1": {"doc-1": 2, "doc-2": 0}}
+
+    result = evaluate_all_strategies(rankings_by_strategy, qrels, k=2)
+
+    assert result["k"] == 2
+    assert result["strategies"]["bm25"]["evaluated_queries"] == 1
+    assert result["strategies"]["vector"]["evaluated_queries"] == 1
+
+
+def test_evaluate_all_strategies_preserves_strategy_names():
+    rankings_by_strategy = {
+        "bm25": {"q1": ["doc-1"]},
+        "vector": {"q1": ["doc-1"]},
+        "hybrid": {"q1": ["doc-1"]},
+    }
+    qrels = {"q1": {"doc-1": 2}}
+
+    result = evaluate_all_strategies(rankings_by_strategy, qrels, k=1)
+
+    assert set(result["strategies"]) == {"bm25", "vector", "hybrid"}
+
+
+def test_evaluate_all_strategies_returns_averages_per_strategy():
+    rankings_by_strategy = {
+        "bm25": {"q1": ["doc-1", "doc-2"]},
+        "vector": {"q1": ["doc-2", "doc-1"]},
+    }
+    qrels = {"q1": {"doc-1": 2, "doc-2": 0}}
+
+    result = evaluate_all_strategies(rankings_by_strategy, qrels, k=2)
+
+    assert result["strategies"]["bm25"]["averages"]["reciprocal_rank"] == 1.0
+    assert result["strategies"]["vector"]["averages"]["reciprocal_rank"] == 0.5
+
+
+def test_evaluate_all_strategies_handles_empty_rankings_by_strategy():
+    result = evaluate_all_strategies({}, {"q1": {"doc-1": 2}}, k=5)
+
+    assert result == {"k": 5, "strategies": {}}
