@@ -1,0 +1,38 @@
+{
+  "bm25": {
+    "q1": [
+      "python_docs:example-decorators:0",
+      "python_docs:example-functions:1",
+      "python_docs:example-classes:2"
+    ],
+    "q2": [
+      "python_docs:example-sequences:0",
+      "python_docs:example-tuples:1",
+      "python_docs:example-lists:2"
+    ]
+  },
+  "vector": {
+    "q1": [
+      "python_docs:example-functions:1",
+      "python_docs:example-decorators:0",
+      "python_docs:example-wrappers:3"
+    ],
+    "q2": [
+      "python_docs:example-lists:2",
+      "python_docs:example-tuples:1",
+      "python_docs:example-sequences:0"
+    ]
+  },
+  "hybrid": {
+    "q1": [
+      "python_docs:example-decorators:0",
+      "python_docs:example-wrappers:3",
+      "python_docs:example-functions:1"
+    ],
+    "q2": [
+      "python_docs:example-tuples:1",
+      "python_docs:example-lists:2",
+      "python_docs:example-sequences:0"
+    ]
+  }
+}
