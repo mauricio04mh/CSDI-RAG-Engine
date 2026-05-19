@@ -1,0 +1,188 @@
+{
+  "bm25": {
+    "q1": [
+      "python_docs:81eb2181b51f:2",
+      "python_docs:9b41286e833d:20",
+      "python_docs:dd5566a4305a:7",
+      "python_docs:f05d926bb6bc:12",
+      "python_docs:76bc3fbfd6ae:134",
+      "python_docs:9b41286e833d:21",
+      "python_docs:dd5566a4305a:2",
+      "python_docs:81eb2181b51f:21",
+      "python_docs:602faed616fe:48",
+      "python_docs:81eb2181b51f:19"
+    ],
+    "q2": [
+      "python_docs:a876ee603b34:11",
+      "python_docs:3d2c09f7f655:8",
+      "python_docs:f05d926bb6bc:7",
+      "python_docs:602faed616fe:61",
+      "python_docs:87070e868eeb:11",
+      "python_docs:9e0d5298158b:21",
+      "python_docs:f05d926bb6bc:6",
+      "python_docs:7a7faed83d15:12",
+      "python_docs:5ddcccca0821:19",
+      "python_docs:69160e936685:26"
+    ],
+    "q3": [
+      "python_docs:0bca57b2e4d8:0",
+      "python_docs:49505b106c7e:3",
+      "python_docs:75b0fe1793b3:0",
+      "python_docs:2e60b70e379a:0",
+      "python_docs:eb537f09fbb9:2",
+      "python_docs:485a043a66a1:1",
+      "python_docs:c7e2c992a011:14",
+      "python_docs:baf39516c7a5:11",
+      "python_docs:baf39516c7a5:10",
+      "python_docs:9e0d5298158b:1"
+    ],
+    "q4": [
+      "python_docs:f05d926bb6bc:7",
+      "python_docs:76bc3fbfd6ae:135",
+      "python_docs:9e0d5298158b:0",
+      "python_docs:91e6f568e951:0",
+      "python_docs:7a15b5a6d721:1",
+      "python_docs:f05d926bb6bc:40",
+      "python_docs:717b760dc5e9:16",
+      "python_docs:cfbe298a7470:1",
+      "python_docs:76bc3fbfd6ae:2",
+      "python_docs:717b760dc5e9:19"
+    ],
+    "q5": [
+      "python_docs:2ce408bd851b:0",
+      "python_docs:602faed616fe:1",
+      "python_docs:31ba02cf9f5e:7",
+      "python_docs:602faed616fe:9",
+      "python_docs:f05d926bb6bc:3",
+      "python_docs:f05d926bb6bc:2",
+      "python_docs:f05d926bb6bc:10",
+      "python_docs:d3bda722db3e:8",
+      "python_docs:76bc3fbfd6ae:63",
+      "python_docs:f05d926bb6bc:5"
+    ]
+  },
+  "vector": {
+    "q1": [
+      "python_docs:f05d926bb6bc:13",
+      "python_docs:baf39516c7a5:15",
+      "python_docs:5ddcccca0821:24",
+      "python_docs:f05d926bb6bc:12",
+      "python_docs:81eb2181b51f:21",
+      "python_docs:4c004fa8cd00:2",
+      "python_docs:16035144c54b:18",
+      "python_docs:5ddcccca0821:0",
+      "python_docs:16035144c54b:9",
+      "python_docs:76bc3fbfd6ae:134"
+    ],
+    "q2": [
+      "python_docs:a876ee603b34:10",
+      "python_docs:76bc3fbfd6ae:31",
+      "python_docs:a876ee603b34:11",
+      "python_docs:76bc3fbfd6ae:152",
+      "python_docs:ac02eed7b47b:27",
+      "python_docs:a876ee603b34:12",
+      "python_docs:76bc3fbfd6ae:32",
+      "python_docs:cfbe298a7470:19",
+      "python_docs:f05d926bb6bc:31",
+      "python_docs:87070e868eeb:11"
+    ],
+    "q3": [
+      "python_docs:76bc3fbfd6ae:134",
+      "python_docs:1a908734421f:35",
+      "python_docs:1a908734421f:16",
+      "python_docs:eb537f09fbb9:5",
+      "python_docs:9e0d5298158b:1",
+      "python_docs:eb537f09fbb9:1",
+      "python_docs:1a908734421f:42",
+      "python_docs:1a908734421f:17",
+      "python_docs:9e0d5298158b:14",
+      "python_docs:ddca76fadd12:16"
+    ],
+    "q4": [
+      "python_docs:717b760dc5e9:9",
+      "python_docs:717b760dc5e9:2",
+      "python_docs:717b760dc5e9:16",
+      "python_docs:717b760dc5e9:8",
+      "python_docs:717b760dc5e9:0",
+      "python_docs:717b760dc5e9:1",
+      "python_docs:717b760dc5e9:19",
+      "python_docs:6a4d29cc900e:0",
+      "python_docs:f05d926bb6bc:30",
+      "python_docs:717b760dc5e9:23"
+    ],
+    "q5": [
+      "python_docs:2ce408bd851b:0",
+      "python_docs:2ce408bd851b:1",
+      "python_docs:f05d926bb6bc:3",
+      "python_docs:31ba02cf9f5e:7",
+      "python_docs:ddca76fadd12:13",
+      "python_docs:ddca76fadd12:0",
+      "python_docs:ddca76fadd12:14",
+      "python_docs:a294dd1dd624:1",
+      "python_docs:a294dd1dd624:23",
+      "python_docs:a294dd1dd624:18"
+    ]
+  },
+  "hybrid": {
+    "q1": [
+      "python_docs:f05d926bb6bc:12",
+      "python_docs:81eb2181b51f:21",
+      "python_docs:f05d926bb6bc:13",
+      "python_docs:76bc3fbfd6ae:134",
+      "python_docs:602faed616fe:48",
+      "python_docs:81eb2181b51f:2",
+      "python_docs:717b760dc5e9:2",
+      "python_docs:81eb2181b51f:3",
+      "python_docs:baf39516c7a5:15",
+      "python_docs:81eb2181b51f:18"
+    ],
+    "q2": [
+      "python_docs:a876ee603b34:11",
+      "python_docs:76bc3fbfd6ae:152",
+      "python_docs:a876ee603b34:10",
+      "python_docs:76bc3fbfd6ae:31",
+      "python_docs:87070e868eeb:11",
+      "python_docs:a876ee603b34:12",
+      "python_docs:f05d926bb6bc:31",
+      "python_docs:cfbe298a7470:19",
+      "python_docs:602faed616fe:61",
+      "python_docs:cfbe298a7470:2"
+    ],
+    "q3": [
+      "python_docs:76bc3fbfd6ae:134",
+      "python_docs:9e0d5298158b:1",
+      "python_docs:eb537f09fbb9:1",
+      "python_docs:eb537f09fbb9:5",
+      "python_docs:eb537f09fbb9:2",
+      "python_docs:9e0d5298158b:0",
+      "python_docs:ddca76fadd12:16",
+      "python_docs:91e4ed3f3cfb:31",
+      "python_docs:49505b106c7e:3",
+      "python_docs:9e0d5298158b:20"
+    ],
+    "q4": [
+      "python_docs:717b760dc5e9:16",
+      "python_docs:717b760dc5e9:0",
+      "python_docs:717b760dc5e9:19",
+      "python_docs:717b760dc5e9:9",
+      "python_docs:6a4d29cc900e:0",
+      "python_docs:f05d926bb6bc:40",
+      "python_docs:f05d926bb6bc:30",
+      "python_docs:f05d926bb6bc:7",
+      "python_docs:717b760dc5e9:21",
+      "python_docs:717b760dc5e9:2"
+    ],
+    "q5": [
+      "python_docs:2ce408bd851b:0",
+      "python_docs:f05d926bb6bc:3",
+      "python_docs:31ba02cf9f5e:7",
+      "python_docs:2ce408bd851b:1",
+      "python_docs:602faed616fe:1",
+      "python_docs:602faed616fe:9",
+      "python_docs:d3bda722db3e:8",
+      "python_docs:602faed616fe:0",
+      "python_docs:f05d926bb6bc:5",
+      "python_docs:ddca76fadd12:13"
+    ]
+  }
+}
