@@ -101,15 +101,16 @@ def run_rankings(
     judgments = store.get_judgments(query_id)
     response_rankings: dict[str, list[RankingResultResponse]] = {}
     persisted_rankings: dict[str, list[str]] = {}
+    fetch_k = _candidate_fetch_k(payload.top_k, query.source_ids)
 
     for strategy in strategies:
-        results = _run_strategy(strategy, query, payload.top_k, request)
+        results = _run_strategy(strategy, query, fetch_k, request)
         enriched = _enrich_results(
             results=results,
             chunk_repo=request.app.state.chunk_repo,
             judgments=judgments,
             source_ids=query.source_ids,
-        )
+        )[:payload.top_k]
         response_rankings[strategy] = enriched
         persisted_rankings[strategy] = [item.chunk_id for item in enriched]
 
@@ -247,6 +248,12 @@ def _run_strategy(
         ) from exc
 
 
+def _candidate_fetch_k(top_k: int, source_ids: list[str] | None) -> int:
+    if source_ids is None:
+        return top_k
+    return min(max(top_k * 5, top_k), 100)
+
+
 def _enrich_results(
     results: list[Any],
     chunk_repo: ChunkRepository,
@@ -332,5 +339,5 @@ def _matches_source_filter(
     if source_ids is None:
         return True
     if item.source_id is None:
-        return True
+        return False
     return item.source_id in set(source_ids)
