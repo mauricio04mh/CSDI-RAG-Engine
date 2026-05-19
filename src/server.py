@@ -22,6 +22,7 @@ from src.database.repositories.web_cache_repository import (
     WebCacheVectorRepository,
 )
 from src.database.repositories.web_search_repository import WebSearchRepository
+from src.evaluation.api.routes import router as evaluation_router
 from src.file_upload.api.routes import router as upload_router
 from src.generation.api.routes import router as rag_router
 from src.generation.chat_history import ChatHistoryStore
@@ -276,6 +277,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router)
     app.include_router(config_router)
     app.include_router(upload_router)
+    app.include_router(evaluation_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:
