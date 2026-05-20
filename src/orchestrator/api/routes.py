@@ -50,7 +50,6 @@ def _build_dynamic_source(url: str) -> SourceConfig:
         allowed_path_prefixes=[path_prefix],
         blocked_path_patterns=[],
         max_depth=0,
-        use_browser_fallback=False,
         technology=["ad_hoc_url"],
         respect_robots=True,
         max_pages=1,

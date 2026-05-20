@@ -38,7 +38,6 @@ def make_source() -> SourceConfig:
         allowed_path_prefixes=["/docs/"],
         blocked_path_patterns=[],
         max_depth=1,
-        use_browser_fallback=False,
         technology=["python"],
         scraper=ScraperConfig(),
     )
