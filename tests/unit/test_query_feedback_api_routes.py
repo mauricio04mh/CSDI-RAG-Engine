@@ -34,6 +34,7 @@ class FakeSearchResult:
 class FakeChunk:
     chunk_id: str
     source_id: str
+    url: str
     title: str
     breadcrumb: str
     text: str
@@ -42,8 +43,19 @@ class FakeChunk:
 class FakeHybridRetriever:
     def __init__(self, results: list[FakeSearchResult]) -> None:
         self._results = results
+        self.calls: list[dict[str, object]] = []
 
-    def search(self, query: str, top_k: int) -> list[FakeSearchResult]:
+    def search(
+        self,
+        query: str,
+        top_k: int,
+        vector_query: str | None = None,
+    ) -> list[FakeSearchResult]:
+        self.calls.append({
+            "query": query,
+            "top_k": top_k,
+            "vector_query": vector_query,
+        })
         return self._results[:top_k]
 
 
@@ -71,6 +83,7 @@ def _build_app() -> FastAPI:
         "doc-1": FakeChunk(
             chunk_id="doc-1",
             source_id="python_docs",
+            url="https://docs.python.org/doc-1",
             title="Closures wrappers",
             breadcrumb="Python Functions",
             text="Decorators often use closures and wrappers.",
@@ -78,6 +91,7 @@ def _build_app() -> FastAPI:
         "doc-2": FakeChunk(
             chunk_id="doc-2",
             source_id="mdn_js",
+            url="https://developer.mozilla.org/doc-2",
             title="Promises callbacks",
             breadcrumb="JavaScript Async",
             text="Callbacks and promises support async flows.",
@@ -85,6 +99,7 @@ def _build_app() -> FastAPI:
         "doc-3": FakeChunk(
             chunk_id="doc-3",
             source_id="python_docs",
+            url="https://docs.python.org/doc-3",
             title="Descriptors generators",
             breadcrumb="Python Classes",
             text="Descriptors and generators complement decorators.",
@@ -172,6 +187,124 @@ async def test_query_feedback_expand_endpoint_rejects_empty_query():
     ) as client:
         response = await client.post(
             "/api/v1/query-feedback/expand",
+            json={
+                "query": "",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_endpoint_uses_expanded_vector_query():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+                "expansion_enabled": True,
+                "top_k_feedback": 2,
+                "max_expansion_terms": 4,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["original_query"] == "python decorator"
+    assert payload["expanded_query"] != "python decorator"
+    assert payload["expansion_terms"]
+    assert payload["strategy"] == "hybrid_expanded_vector"
+    assert payload["expansion_enabled"] is True
+    assert len(payload["results"]) == 2
+    assert payload["results"][0]["chunk_id"] == "doc-1"
+    assert payload["results"][0]["source_id"] == "python_docs"
+    assert payload["results"][0]["url"] == "https://docs.python.org/doc-1"
+    assert payload["results"][0]["title"] == "Closures wrappers"
+    assert payload["results"][0]["breadcrumb"] == "Python Functions"
+    assert "Decorators often use closures" in payload["results"][0]["text"]
+
+    final_call = app.state.hybrid_retriever.calls[-1]
+    assert final_call["query"] == "python decorator"
+    assert final_call["vector_query"] == payload["expanded_query"]
+    assert final_call["top_k"] == 2
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_endpoint_without_expansion_uses_plain_hybrid():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+                "expansion_enabled": False,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["expanded_query"] == "python decorator"
+    assert payload["expansion_terms"] == []
+    assert payload["method"] == "none"
+    assert payload["strategy"] == "hybrid"
+    assert payload["expansion_enabled"] is False
+    final_call = app.state.hybrid_retriever.calls[-1]
+    assert final_call["query"] == "python decorator"
+    assert final_call["vector_query"] is None
+    assert final_call["top_k"] == 2
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_endpoint_applies_source_filter():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+                "source_ids": ["python_docs"],
+                "expansion_enabled": True,
+                "top_k_feedback": 2,
+                "max_expansion_terms": 4,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["source_id"] for item in payload["results"]] == ["python_docs", "python_docs"]
+    assert [item["chunk_id"] for item in payload["results"]] == ["doc-1", "doc-3"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_endpoint_rejects_empty_query():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search",
             json={
                 "query": "",
             },

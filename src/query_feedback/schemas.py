@@ -12,3 +12,26 @@ class ExpansionResult:
     expansion_terms: list[str]
     method: str
     feedback_documents_used: int
+
+
+@dataclass(slots=True)
+class SearchResultItem:
+    chunk_id: str
+    score: float
+    source_id: str
+    url: str
+    title: str
+    breadcrumb: str
+    text: str
+
+
+@dataclass(slots=True)
+class ExpandedSearchResult:
+    original_query: str
+    expanded_query: str
+    expansion_terms: list[str]
+    method: str
+    strategy: str
+    expansion_enabled: bool
+    feedback_documents_used: int
+    results: list[SearchResultItem]
