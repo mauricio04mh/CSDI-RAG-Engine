@@ -53,6 +53,22 @@ Example request:
 }
 ```
 
+## Phase 4
+
+Phase 4 adds explicit relevance feedback persistence in PostgreSQL.
+
+- Feedback is stored with a 0-3 scale:
+  - 0 = not relevant
+  - 1 = marginal
+  - 2 = relevant
+  - 3 = highly relevant
+- Existing feedback is updated for the same `normalized_query + chunk_id + session_id`.
+- Feedback is not yet used for reranking in this phase.
+
+Endpoint:
+
+- `POST /api/v1/query-feedback/feedback`
+
 Example response shape:
 
 ```json

@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 import httpx
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 if "snowballstemmer" not in sys.modules:
     def _stem_word(token: str) -> str:
@@ -21,6 +23,7 @@ if "snowballstemmer" not in sys.modules:
         stemmer=lambda _language: SimpleNamespace(stemWord=_stem_word)
     )
 
+from src.query_feedback.models import Base as QueryFeedbackBase
 from src.query_feedback.api.routes import router
 
 
@@ -105,6 +108,13 @@ def _build_app() -> FastAPI:
             text="Descriptors and generators complement decorators.",
         ),
     })
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    QueryFeedbackBase.metadata.create_all(engine)
+    app.state.db_engine = engine
     return app
 
 
@@ -307,6 +317,135 @@ async def test_query_feedback_search_endpoint_rejects_empty_query():
             "/api/v1/query-feedback/search",
             json={
                 "query": "",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_feedback_endpoint_returns_stored_record():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+                "source_id": "python_docs",
+                "notes": "Very useful",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == 1
+    assert payload["query"] == "How do decorators work?"
+    assert payload["normalized_query"] == "how do decorators work?"
+    assert payload["chunk_id"] == "doc-1"
+    assert payload["relevance"] == 3
+    assert payload["stored"] is True
+
+
+@pytest.mark.anyio
+async def test_query_feedback_feedback_endpoint_updates_existing_record():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        first = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 1,
+                "session_id": "session-a",
+            },
+        )
+        second = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "  how do   decorators work? ",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+                "notes": "Updated",
+                "session_id": "session-a",
+            },
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    assert second.json()["relevance"] == 3
+    assert second.json()["notes"] == "Updated"
+
+
+@pytest.mark.anyio
+async def test_query_feedback_feedback_endpoint_rejects_invalid_relevance():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 4,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_feedback_endpoint_rejects_empty_query():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "",
+                "chunk_id": "doc-1",
+                "relevance": 2,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_feedback_endpoint_rejects_empty_chunk_id():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "",
+                "relevance": 2,
             },
         )
 

@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from src.query_feedback.repositories.feedback_repository import FeedbackRepository
 from src.query_feedback.service import QueryFeedbackService
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,29 @@ class QueryFeedbackSearchResponse(BaseModel):
     expansion_enabled: bool
     feedback_documents_used: int
     results: list[QueryFeedbackSearchResultItem]
+
+
+class FeedbackRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    chunk_id: str = Field(..., min_length=1)
+    relevance: int = Field(..., ge=0, le=3)
+    source_id: str | None = None
+    notes: str | None = None
+    session_id: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    query: str
+    normalized_query: str
+    chunk_id: str
+    source_id: str | None
+    relevance: int
+    notes: str | None
+    session_id: str | None
+    created_at: str
+    updated_at: str | None
+    stored: bool
 
 
 @router.get("/health")
@@ -137,4 +161,40 @@ async def search_with_expansion(
             )
             for item in result.results
         ],
+    )
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+async def store_feedback(
+    payload: FeedbackRequest,
+    request: Request,
+) -> FeedbackResponse:
+    repository = FeedbackRepository(request.app.state.db_engine)
+    try:
+        record = repository.add_or_update_feedback(
+            query=payload.query,
+            chunk_id=payload.chunk_id,
+            relevance=payload.relevance,
+            source_id=payload.source_id,
+            notes=payload.notes,
+            session_id=payload.session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("query_feedback_store_failed")
+        raise HTTPException(status_code=500, detail="Feedback persistence failed.") from exc
+
+    return FeedbackResponse(
+        id=record.id,
+        query=record.query,
+        normalized_query=record.normalized_query,
+        chunk_id=record.chunk_id,
+        source_id=record.source_id,
+        relevance=record.relevance,
+        notes=record.notes,
+        session_id=record.session_id,
+        created_at=record.created_at.isoformat(),
+        updated_at=record.updated_at.isoformat() if record.updated_at is not None else None,
+        stored=True,
     )

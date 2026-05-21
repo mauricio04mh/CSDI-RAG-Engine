@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(slots=True)
@@ -35,3 +36,17 @@ class ExpandedSearchResult:
     expansion_enabled: bool
     feedback_documents_used: int
     results: list[SearchResultItem]
+
+
+@dataclass(slots=True)
+class FeedbackRecord:
+    id: int
+    query: str
+    normalized_query: str
+    chunk_id: str
+    source_id: str | None
+    relevance: int
+    notes: str | None
+    session_id: str | None
+    created_at: datetime
+    updated_at: datetime | None
