@@ -10,6 +10,64 @@ import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
+if "numpy" not in sys.modules:
+    class _FakeNdArray:
+        def __init__(self, values):
+            self._values = values
+
+        @property
+        def ndim(self) -> int:
+            if isinstance(self._values, list) and self._values and isinstance(self._values[0], list):
+                return 2
+            if isinstance(self._values, list):
+                return 1
+            return 0
+
+        @property
+        def shape(self) -> tuple[int, ...]:
+            if self.ndim == 2:
+                return (len(self._values), len(self._values[0]) if self._values else 0)
+            if self.ndim == 1:
+                return (len(self._values),)
+            return ()
+
+        def reshape(self, _size: int):
+            return _FakeNdArray(_flatten(self._values))
+
+        def __iter__(self):
+            return iter(self._values)
+
+    def _flatten(value):
+        if isinstance(value, list):
+            flattened = []
+            for item in value:
+                flattened.extend(_flatten(item))
+            return flattened
+        return [float(value)]
+
+    def _asarray(value, dtype=float):
+        if isinstance(value, _FakeNdArray):
+            return value
+        if isinstance(value, tuple):
+            value = list(value)
+        if isinstance(value, list):
+            if value and isinstance(value[0], tuple):
+                value = [list(item) for item in value]
+            return _FakeNdArray(value)
+        return _FakeNdArray(dtype(value))
+
+    def _dot(left, right):
+        left_values = _flatten(left._values if isinstance(left, _FakeNdArray) else left)
+        right_values = _flatten(right._values if isinstance(right, _FakeNdArray) else right)
+        return sum(a * b for a, b in zip(left_values, right_values, strict=True))
+
+    sys.modules["numpy"] = SimpleNamespace(
+        ndarray=_FakeNdArray,
+        array=lambda value, dtype=float: _asarray(value, dtype=dtype),
+        asarray=_asarray,
+        dot=_dot,
+    )
+
 if "snowballstemmer" not in sys.modules:
     def _stem_word(token: str) -> str:
         for suffix in ("ators", "ator", "ated", "ers", "er", "ing", "ies", "ied", "ed", "es", "s"):
@@ -75,24 +133,41 @@ class FakeChunkRepository:
 
 
 class FakeEmbeddingModel:
-    def encode_query(self, text: str, prefix: str = "") -> list[float]:
+    def encode_query(self, text: str, prefix: str = ""):
         normalized = " ".join(text.strip().lower().split())
         if normalized == "how do decorators work?":
-            return [1.0, 0.0]
+            import numpy as np
+            return np.array([1.0, 0.0])
         if normalized == "explain python decorators":
-            return [0.96, 0.28]
+            import numpy as np
+            return np.array([0.96, 0.28])
         if normalized == "why use python decorators":
-            return [0.93, 0.37]
-        return [0.0, 1.0]
+            import numpy as np
+            return np.array([0.93, 0.37])
+        import numpy as np
+        return np.array([0.0, 1.0])
+
+
+class FakeEmbeddingModel2D:
+    def encode_query(self, text: str, prefix: str = ""):
+        normalized = " ".join(text.strip().lower().split())
+        if normalized == "how do decorators work?":
+            import numpy as np
+            return np.array([[1.0, 0.0]])
+        if normalized == "explain python decorators":
+            import numpy as np
+            return np.array([[0.96, 0.28]])
+        import numpy as np
+        return np.array([[0.0, 1.0]])
 
 
 class FakeVectorRetriever:
-    def __init__(self) -> None:
-        self._embedding_model = FakeEmbeddingModel()
+    def __init__(self, embedding_model=None) -> None:
+        self._embedding_model = embedding_model or FakeEmbeddingModel()
         self._query_prefix = "query: "
 
 
-def _build_app() -> FastAPI:
+def _build_app(*, embedding_model=None) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     app.state.hybrid_retriever = FakeHybridRetriever([
@@ -133,7 +208,7 @@ def _build_app() -> FastAPI:
     )
     QueryFeedbackBase.metadata.create_all(engine)
     app.state.db_engine = engine
-    app.state.vector_retriever = FakeVectorRetriever()
+    app.state.vector_retriever = FakeVectorRetriever(embedding_model=embedding_model)
     return app
 
 
@@ -581,6 +656,35 @@ async def test_query_feedback_search_with_feedback_applies_semantic_feedback():
     assert payload["matched_feedback_queries"]
     assert payload["matched_feedback_queries"][0]["query"] == "How do decorators work?"
     assert float(payload["matched_feedback_queries"][0]["similarity"]) >= 0.92
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_supports_2d_numpy_embeddings():
+    app = _build_app(embedding_model=FakeEmbeddingModel2D())
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "Explain Python decorators",
+                "top_k": 2,
+                "semantic_feedback_enabled": True,
+                "semantic_similarity_threshold": 0.92,
+            },
+        )
+
+    assert response.status_code == 200
+    doc_1 = next(item for item in response.json()["results"] if item["chunk_id"] == "doc-1")
+    assert doc_1["feedback_match_type"] == "semantic"
 
 
 @pytest.mark.anyio

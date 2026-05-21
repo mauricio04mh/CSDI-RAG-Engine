@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 
+try:
+    import numpy as np
+except ModuleNotFoundError:  # pragma: no cover - production installs should provide numpy.
+    np = None
+
 from src.query_feedback.expansion import QueryExpansionService
 from src.query_feedback.reranker import FeedbackReranker
 from src.query_feedback.repositories.feedback_repository import normalize_query
@@ -341,9 +346,33 @@ class QueryFeedbackService:
     def _query_embedding(self, query: str) -> Iterable[float]:
         return self._embedding_model.encode_query(query, prefix=self._query_prefix)
 
+    def _as_1d_float_vector(self, value) -> np.ndarray:
+        if np is None:
+            return self._as_1d_float_sequence(value)
+        vector = np.asarray(value, dtype=float)
+        if vector.ndim == 0:
+            return vector.reshape(1)
+        return vector.reshape(-1)
+
     def _dot_product(
         self,
         left: Iterable[float],
         right: Iterable[float],
     ) -> float:
-        return float(sum(float(a) * float(b) for a, b in zip(left, right, strict=False)))
+        left_vector = self._as_1d_float_vector(left)
+        right_vector = self._as_1d_float_vector(right)
+        left_size = left_vector.shape[0] if np is not None else len(left_vector)
+        right_size = right_vector.shape[0] if np is not None else len(right_vector)
+        if left_size != right_size:
+            raise ValueError("embedding dimensions do not match")
+        if np is None:
+            return float(sum(a * b for a, b in zip(left_vector, right_vector, strict=True)))
+        return float(np.dot(left_vector, right_vector))
+
+    def _as_1d_float_sequence(self, value) -> list[float]:
+        if isinstance(value, (list, tuple)):
+            flattened: list[float] = []
+            for item in value:
+                flattened.extend(self._as_1d_float_sequence(item))
+            return flattened
+        return [float(value)]
