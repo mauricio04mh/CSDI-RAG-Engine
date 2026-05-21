@@ -81,6 +81,52 @@ class FeedbackResponse(BaseModel):
     stored: bool
 
 
+class QueryFeedbackSearchWithFeedbackRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(default=10, ge=1, le=50)
+    source_ids: list[str] | None = None
+    expansion_enabled: bool = True
+    top_k_feedback: int = Field(default=5, ge=1, le=50)
+    max_expansion_terms: int = Field(default=6, ge=0, le=20)
+    feedback_enabled: bool = True
+    semantic_feedback_enabled: bool = True
+    semantic_similarity_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+
+
+class QueryFeedbackAdjustedSearchResultItem(BaseModel):
+    chunk_id: str
+    original_score: float
+    adjusted_score: float
+    feedback_boost: float
+    feedback_applied: bool
+    feedback_relevance: int | None
+    feedback_source_query: str | None
+    feedback_query_similarity: float | None
+    feedback_match_type: str | None
+    source_id: str
+    url: str
+    title: str
+    breadcrumb: str
+    text: str
+
+
+class QueryFeedbackSearchWithFeedbackResponse(BaseModel):
+    original_query: str
+    expanded_query: str
+    expansion_terms: list[str]
+    method: str
+    strategy: str
+    expansion_enabled: bool
+    feedback_enabled: bool
+    semantic_feedback_enabled: bool
+    semantic_similarity_threshold: float
+    feedback_applied: bool
+    feedback_items_used: int
+    matched_feedback_queries: list[dict[str, str | float]]
+    feedback_documents_used: int
+    results: list[QueryFeedbackAdjustedSearchResultItem]
+
+
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "module": "query-feedback"}
@@ -197,4 +243,78 @@ async def store_feedback(
         created_at=record.created_at.isoformat(),
         updated_at=record.updated_at.isoformat() if record.updated_at is not None else None,
         stored=True,
+    )
+
+
+@router.post("/search-with-feedback", response_model=QueryFeedbackSearchWithFeedbackResponse)
+async def search_with_feedback(
+    payload: QueryFeedbackSearchWithFeedbackRequest,
+    request: Request,
+) -> QueryFeedbackSearchWithFeedbackResponse:
+    feedback_repository = FeedbackRepository(request.app.state.db_engine)
+    vector_retriever = getattr(request.app.state, "vector_retriever", None)
+    embedding_model = None
+    query_prefix = ""
+    if vector_retriever is not None:
+        embedding_model = getattr(vector_retriever, "_embedding_model", None)
+        query_prefix = getattr(vector_retriever, "_query_prefix", "")
+
+    service = QueryFeedbackService(
+        hybrid_retriever=request.app.state.hybrid_retriever,
+        chunk_repo=request.app.state.chunk_repo,
+        feedback_repository=feedback_repository,
+        embedding_model=embedding_model,
+        query_prefix=query_prefix,
+    )
+    try:
+        result = service.search_with_feedback(
+            query=payload.query,
+            top_k=payload.top_k,
+            source_ids=payload.source_ids,
+            expansion_enabled=payload.expansion_enabled,
+            top_k_feedback=payload.top_k_feedback,
+            max_expansion_terms=payload.max_expansion_terms,
+            feedback_enabled=payload.feedback_enabled,
+            semantic_feedback_enabled=payload.semantic_feedback_enabled,
+            semantic_similarity_threshold=payload.semantic_similarity_threshold,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("query_feedback_reranking_failed")
+        raise HTTPException(status_code=500, detail="Query feedback reranking failed.") from exc
+
+    return QueryFeedbackSearchWithFeedbackResponse(
+        original_query=result.original_query,
+        expanded_query=result.expanded_query,
+        expansion_terms=result.expansion_terms,
+        method=result.method,
+        strategy=result.strategy,
+        expansion_enabled=result.expansion_enabled,
+        feedback_enabled=result.feedback_enabled,
+        semantic_feedback_enabled=result.semantic_feedback_enabled,
+        semantic_similarity_threshold=result.semantic_similarity_threshold,
+        feedback_applied=result.feedback_applied,
+        feedback_items_used=result.feedback_items_used,
+        matched_feedback_queries=result.matched_feedback_queries,
+        feedback_documents_used=result.feedback_documents_used,
+        results=[
+            QueryFeedbackAdjustedSearchResultItem(
+                chunk_id=item.chunk_id,
+                original_score=item.original_score,
+                adjusted_score=item.adjusted_score,
+                feedback_boost=item.feedback_boost,
+                feedback_applied=item.feedback_applied,
+                feedback_relevance=item.feedback_relevance,
+                feedback_source_query=item.feedback_source_query,
+                feedback_query_similarity=item.feedback_query_similarity,
+                feedback_match_type=item.feedback_match_type,
+                source_id=item.source_id,
+                url=item.url,
+                title=item.title,
+                breadcrumb=item.breadcrumb,
+                text=item.text,
+            )
+            for item in result.results
+        ],
     )

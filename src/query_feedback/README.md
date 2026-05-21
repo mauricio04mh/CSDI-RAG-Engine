@@ -69,6 +69,27 @@ Endpoint:
 
 - `POST /api/v1/query-feedback/feedback`
 
+## Phase 5
+
+Phase 5 adds feedback-based reranking.
+
+- `/search-with-feedback` applies explicit feedback after the normal retrieval flow.
+- Exact feedback uses the same normalized query as the current request.
+- Semantic feedback can reuse feedback from similar previous queries.
+- The default semantic threshold is `0.92`.
+- Score adjustment uses:
+  - `adjusted_score = original_score * (1 + multiplier)`
+  - relevance `3 -> +0.50`
+  - relevance `2 -> +0.25`
+  - relevance `1 -> +0.05`
+  - relevance `0 -> -0.40`
+- Feedback is applied only through `/search-with-feedback`.
+- `/search` remains unchanged.
+
+Endpoint:
+
+- `POST /api/v1/query-feedback/search-with-feedback`
+
 Example response shape:
 
 ```json

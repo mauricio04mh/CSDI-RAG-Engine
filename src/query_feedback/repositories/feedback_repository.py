@@ -107,6 +107,26 @@ class FeedbackRepository:
             rows = session.execute(stmt).scalars().all()
         return [self._to_feedback_record(row) for row in rows]
 
+    def list_distinct_feedback_queries(self) -> list[FeedbackRecord]:
+        distinct_records: list[FeedbackRecord] = []
+        seen_queries: set[str] = set()
+        for record in self.list_all_feedback():
+            if record.normalized_query in seen_queries:
+                continue
+            seen_queries.add(record.normalized_query)
+            distinct_records.append(record)
+        return distinct_records
+
+    def list_all_feedback(self) -> list[FeedbackRecord]:
+        stmt = select(QueryFeedback).order_by(
+            desc(QueryFeedback.updated_at),
+            desc(QueryFeedback.created_at),
+            desc(QueryFeedback.id),
+        )
+        with Session(self._engine) as session:
+            rows = session.execute(stmt).scalars().all()
+        return [self._to_feedback_record(row) for row in rows]
+
     def _feedback_lookup_statement(
         self,
         normalized_query: str,

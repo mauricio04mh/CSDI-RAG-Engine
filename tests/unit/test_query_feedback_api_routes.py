@@ -74,6 +74,24 @@ class FakeChunkRepository:
         }
 
 
+class FakeEmbeddingModel:
+    def encode_query(self, text: str, prefix: str = "") -> list[float]:
+        normalized = " ".join(text.strip().lower().split())
+        if normalized == "how do decorators work?":
+            return [1.0, 0.0]
+        if normalized == "explain python decorators":
+            return [0.96, 0.28]
+        if normalized == "why use python decorators":
+            return [0.93, 0.37]
+        return [0.0, 1.0]
+
+
+class FakeVectorRetriever:
+    def __init__(self) -> None:
+        self._embedding_model = FakeEmbeddingModel()
+        self._query_prefix = "query: "
+
+
 def _build_app() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
@@ -115,6 +133,7 @@ def _build_app() -> FastAPI:
     )
     QueryFeedbackBase.metadata.create_all(engine)
     app.state.db_engine = engine
+    app.state.vector_retriever = FakeVectorRetriever()
     return app
 
 
@@ -446,6 +465,217 @@ async def test_query_feedback_feedback_endpoint_rejects_empty_chunk_id():
                 "query": "How do decorators work?",
                 "chunk_id": "",
                 "relevance": 2,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_without_saved_feedback_keeps_scores():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["feedback_applied"] is False
+    assert payload["feedback_items_used"] == 0
+    assert payload["results"][0]["adjusted_score"] == payload["results"][0]["original_score"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_applies_exact_feedback():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "python decorator",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    doc_1 = next(item for item in payload["results"] if item["chunk_id"] == "doc-1")
+    assert payload["feedback_applied"] is True
+    assert doc_1["feedback_match_type"] == "exact"
+    assert doc_1["adjusted_score"] > doc_1["original_score"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_applies_negative_exact_feedback():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "python decorator",
+                "chunk_id": "doc-1",
+                "relevance": 0,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "python decorator",
+                "top_k": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    doc_1 = next(item for item in response.json()["results"] if item["chunk_id"] == "doc-1")
+    assert doc_1["adjusted_score"] < doc_1["original_score"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_applies_semantic_feedback():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "Explain Python decorators",
+                "top_k": 2,
+                "semantic_feedback_enabled": True,
+                "semantic_similarity_threshold": 0.92,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    doc_1 = next(item for item in payload["results"] if item["chunk_id"] == "doc-1")
+    assert doc_1["feedback_match_type"] == "semantic"
+    assert doc_1["feedback_applied"] is True
+    assert payload["matched_feedback_queries"]
+    assert payload["matched_feedback_queries"][0]["query"] == "How do decorators work?"
+    assert float(payload["matched_feedback_queries"][0]["similarity"]) >= 0.92
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_respects_semantic_threshold():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "Explain Python decorators",
+                "top_k": 2,
+                "semantic_feedback_enabled": True,
+                "semantic_similarity_threshold": 1.0,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["feedback_applied"] is False
+    assert payload["matched_feedback_queries"] == []
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_prefers_exact_over_semantic():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "How do decorators work?",
+                "chunk_id": "doc-1",
+                "relevance": 0,
+            },
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={
+                "query": "Explain Python decorators",
+                "chunk_id": "doc-1",
+                "relevance": 3,
+            },
+        )
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "Explain Python decorators",
+                "top_k": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    doc_1 = next(item for item in response.json()["results"] if item["chunk_id"] == "doc-1")
+    assert doc_1["feedback_match_type"] == "exact"
+    assert doc_1["feedback_relevance"] == 3
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_rejects_empty_query():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_search_with_feedback_rejects_invalid_similarity_threshold():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/query-feedback/search-with-feedback",
+            json={
+                "query": "python decorator",
+                "semantic_similarity_threshold": 1.2,
             },
         )
 
