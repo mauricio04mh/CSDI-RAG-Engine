@@ -140,3 +140,21 @@ def test_expand_from_chunks_reports_feedback_documents_used():
     result = service.expand_from_chunks("decorator", chunks, max_expansion_terms=2)
 
     assert result.feedback_documents_used == 2
+
+
+def test_expand_from_chunks_avoids_duplicate_normalized_terms():
+    service = QueryExpansionService()
+    chunks = [
+        FakeChunk(
+            chunk_id="c1",
+            source_id="python_docs",
+            title="wrapper wrappers closures",
+            breadcrumb="",
+            text="",
+        ),
+    ]
+
+    result = service.expand_from_chunks("decorator", chunks, max_expansion_terms=3)
+
+    assert {"wrapper", "wrappers"} & set(result.expansion_terms)
+    assert not {"wrapper", "wrappers"} <= set(result.expansion_terms)

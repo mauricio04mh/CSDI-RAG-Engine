@@ -34,13 +34,10 @@ class QueryExpansionService:
 
         query_tokens = set(tokenize(stripped_query))
         candidates = self._extract_candidate_terms(chunks, query_tokens)
-        ordered_terms = [
-            term
-            for term, _score in sorted(
-                candidates.items(),
-                key=lambda item: (-item[1], item[0]),
-            )[:max_expansion_terms]
-        ]
+        ordered_terms = self._select_expansion_terms(
+            candidates=candidates,
+            max_expansion_terms=max_expansion_terms,
+        )
 
         return ExpansionResult(
             original_query=query,
@@ -77,10 +74,35 @@ class QueryExpansionService:
     def _candidate_tokens(self, term: str) -> set[str]:
         return set(tokenize(term))
 
+    def _candidate_signature(self, term: str) -> tuple[str, ...]:
+        return tuple(sorted(tokenize(term)))
+
     def _build_expanded_query(self, query: str, expansion_terms: list[str]) -> str:
         if not expansion_terms:
             return query
         return f"{query} {' '.join(expansion_terms)}"
+
+    def _select_expansion_terms(
+        self,
+        candidates: dict[str, float],
+        max_expansion_terms: int,
+    ) -> list[str]:
+        selected_terms: list[str] = []
+        selected_signatures: set[tuple[str, ...]] = set()
+
+        for term, _score in sorted(
+            candidates.items(),
+            key=lambda item: (-item[1], item[0]),
+        ):
+            signature = self._candidate_signature(term)
+            if signature in selected_signatures:
+                continue
+            selected_terms.append(term)
+            selected_signatures.add(signature)
+            if len(selected_terms) >= max_expansion_terms:
+                break
+
+        return selected_terms
 
     def _unique_terms(self, text: str) -> Iterable[str]:
         seen: set[str] = set()
