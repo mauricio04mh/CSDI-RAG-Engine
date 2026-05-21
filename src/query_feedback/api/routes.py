@@ -94,7 +94,7 @@ async def expand_query(
 
 
 @router.post("/search", response_model=QueryFeedbackSearchResponse)
-async def search_with_feedback(
+async def search_with_expansion(
     payload: QueryFeedbackSearchRequest,
     request: Request,
 ) -> QueryFeedbackSearchResponse:
