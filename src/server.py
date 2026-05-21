@@ -38,6 +38,7 @@ from src.indexing.config.settings import load_settings as load_indexing_settings
 from src.metrics.api.routes import router as metrics_router
 from src.orchestrator.api.routes import router as ingestion_router
 from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
+from src.query_feedback.api.routes import router as query_feedback_router
 from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 from src.sources_config.source_config_repository import SourceConfigRepository
 from src.vector_indexing.api.routes import router as vector_indexing_router
@@ -278,6 +279,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(upload_router)
     app.include_router(evaluation_router)
+    app.include_router(query_feedback_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:
