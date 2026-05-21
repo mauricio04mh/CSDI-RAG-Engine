@@ -1,0 +1,34 @@
+{
+  "total_queries": 5,
+  "total_ranked_positions": 150,
+  "unique_ranked_pairs": 98,
+  "judged_pairs": 98,
+  "missing_pairs": 0,
+  "missing_by_query": {
+    "q1": {
+      "bm25": [],
+      "vector": [],
+      "hybrid": []
+    },
+    "q2": {
+      "bm25": [],
+      "vector": [],
+      "hybrid": []
+    },
+    "q3": {
+      "bm25": [],
+      "vector": [],
+      "hybrid": []
+    },
+    "q4": {
+      "bm25": [],
+      "vector": [],
+      "hybrid": []
+    },
+    "q5": {
+      "bm25": [],
+      "vector": [],
+      "hybrid": []
+    }
+  }
+}

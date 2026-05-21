@@ -1,0 +1,27 @@
+[
+  {
+    "id": "q1",
+    "query": "How do Python decorators work?",
+    "source_ids": ["python_docs"]
+  },
+  {
+    "id": "q2",
+    "query": "What is the difference between list and tuple in Python?",
+    "source_ids": ["python_docs"]
+  },
+  {
+    "id": "q3",
+    "query": "How does exception handling work in Python?",
+    "source_ids": ["python_docs"]
+  },
+  {
+    "id": "q4",
+    "query": "How do I define a class in Python?",
+    "source_ids": ["python_docs"]
+  },
+  {
+    "id": "q5",
+    "query": "How does async await work in Python?",
+    "source_ids": ["python_docs"]
+  }
+]
