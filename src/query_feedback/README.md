@@ -90,6 +90,16 @@ Endpoint:
 
 - `POST /api/v1/query-feedback/search-with-feedback`
 
+## Phase 6
+
+Phase 6 adds feedback summary and feedback-by-query endpoints.
+
+- `/feedback/summary` exposes aggregate feedback statistics.
+- `GET /feedback?query=...` returns feedback associated with a normalized query.
+- These endpoints support traceability, debugging and future frontend visualization.
+- No recent feedback endpoint is implemented in this phase.
+- No evaluation integration is implemented in this phase.
+
 Example response shape:
 
 ```json

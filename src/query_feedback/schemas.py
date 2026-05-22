@@ -96,3 +96,13 @@ class FeedbackRerankResult:
     matched_feedback_queries: list[dict[str, str | float]]
     feedback_documents_used: int
     results: list[FeedbackAdjustedSearchResultItem]
+
+
+@dataclass(slots=True)
+class FeedbackSummary:
+    total_feedback_items: int
+    queries_with_feedback: int
+    positive_feedback: int
+    negative_feedback: int
+    marginal_feedback: int
+    average_relevance: float

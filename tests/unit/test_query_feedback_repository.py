@@ -155,3 +155,76 @@ def test_get_feedback_for_chunk_returns_feedback_for_chunk():
         "how do decorators work?",
         "how do generators work?",
     }
+
+
+def test_get_summary_returns_zeros_for_empty_repository():
+    repository = _build_repository()
+
+    summary = repository.get_summary()
+
+    assert summary.total_feedback_items == 0
+    assert summary.queries_with_feedback == 0
+    assert summary.positive_feedback == 0
+    assert summary.negative_feedback == 0
+    assert summary.marginal_feedback == 0
+    assert summary.average_relevance == 0.0
+
+
+def test_get_summary_counts_feedback_records_and_average():
+    repository = _build_repository()
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-1", relevance=3)
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-2", relevance=0)
+    repository.add_or_update_feedback(query="Explain generators", chunk_id="chunk-3", relevance=1)
+
+    summary = repository.get_summary()
+
+    assert summary.total_feedback_items == 3
+    assert summary.queries_with_feedback == 2
+    assert summary.positive_feedback == 1
+    assert summary.negative_feedback == 1
+    assert summary.marginal_feedback == 1
+    assert summary.average_relevance == 4 / 3
+
+
+def test_get_feedback_for_normalized_query_returns_matching_records():
+    repository = _build_repository()
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-1", relevance=3)
+    repository.add_or_update_feedback(query="  how do   decorators work? ", chunk_id="chunk-2", relevance=2)
+    repository.add_or_update_feedback(query="Other query", chunk_id="chunk-3", relevance=1)
+
+    records = repository.get_feedback_for_normalized_query("how do decorators work?")
+
+    assert [record.chunk_id for record in records] == ["chunk-2", "chunk-1"]
+
+
+def test_get_feedback_for_normalized_query_applies_session_filter():
+    repository = _build_repository()
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-1", relevance=3, session_id="session-a")
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-2", relevance=2, session_id="session-b")
+
+    records = repository.get_feedback_for_normalized_query(
+        "how do decorators work?",
+        session_id="session-a",
+    )
+
+    assert [record.chunk_id for record in records] == ["chunk-1"]
+
+
+def test_get_feedback_for_normalized_query_returns_all_sessions_when_session_is_none():
+    repository = _build_repository()
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-1", relevance=3, session_id="session-a")
+    repository.add_or_update_feedback(query="How do decorators work?", chunk_id="chunk-2", relevance=2, session_id="session-b")
+
+    records = repository.get_feedback_for_normalized_query("how do decorators work?")
+
+    assert [record.chunk_id for record in records] == ["chunk-2", "chunk-1"]
+
+
+def test_get_feedback_for_normalized_query_rejects_empty_input():
+    repository = _build_repository()
+
+    try:
+        repository.get_feedback_for_normalized_query("   ")
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert str(exc) == "normalized_query must not be empty"

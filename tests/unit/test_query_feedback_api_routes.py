@@ -547,6 +547,132 @@ async def test_query_feedback_feedback_endpoint_rejects_empty_chunk_id():
 
 
 @pytest.mark.anyio
+async def test_query_feedback_summary_endpoint_returns_zeros_without_feedback():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/v1/query-feedback/feedback/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_feedback_items": 0,
+        "queries_with_feedback": 0,
+        "positive_feedback": 0,
+        "negative_feedback": 0,
+        "marginal_feedback": 0,
+        "average_relevance": 0.0,
+    }
+
+
+@pytest.mark.anyio
+async def test_query_feedback_summary_endpoint_returns_aggregate_counts():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "How do decorators work?", "chunk_id": "doc-1", "relevance": 3},
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "How do decorators work?", "chunk_id": "doc-2", "relevance": 0},
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "Explain generators", "chunk_id": "doc-3", "relevance": 1},
+        )
+        response = await client.get("/api/v1/query-feedback/feedback/summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_feedback_items"] == 3
+    assert payload["queries_with_feedback"] == 2
+    assert payload["positive_feedback"] == 1
+    assert payload["negative_feedback"] == 1
+    assert payload["marginal_feedback"] == 1
+    assert payload["average_relevance"] == 4 / 3
+
+
+@pytest.mark.anyio
+async def test_query_feedback_get_feedback_by_query_returns_matching_items():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "How do decorators work?", "chunk_id": "doc-1", "relevance": 3},
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "  how do   decorators work? ", "chunk_id": "doc-2", "relevance": 2},
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "Other query", "chunk_id": "doc-3", "relevance": 1},
+        )
+        response = await client.get(
+            "/api/v1/query-feedback/feedback",
+            params={"query": "How do decorators work?"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["normalized_query"] == "how do decorators work?"
+    assert [item["chunk_id"] for item in payload["items"]] == ["doc-2", "doc-1"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_get_feedback_by_query_applies_session_filter():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "How do decorators work?", "chunk_id": "doc-1", "relevance": 3, "session_id": "session-a"},
+        )
+        await client.post(
+            "/api/v1/query-feedback/feedback",
+            json={"query": "How do decorators work?", "chunk_id": "doc-2", "relevance": 2, "session_id": "session-b"},
+        )
+        response = await client.get(
+            "/api/v1/query-feedback/feedback",
+            params={"query": "How do decorators work?", "session_id": "session-a"},
+        )
+
+    assert response.status_code == 200
+    assert [item["chunk_id"] for item in response.json()["items"]] == ["doc-1"]
+
+
+@pytest.mark.anyio
+async def test_query_feedback_get_feedback_by_query_requires_query_parameter():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/v1/query-feedback/feedback")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_query_feedback_get_feedback_by_query_rejects_whitespace_query():
+    app = _build_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get(
+            "/api/v1/query-feedback/feedback",
+            params={"query": "   "},
+        )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.anyio
 async def test_query_feedback_search_with_feedback_without_saved_feedback_keeps_scores():
     app = _build_app()
 

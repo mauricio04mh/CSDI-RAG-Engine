@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from src.query_feedback.repositories.feedback_repository import FeedbackRepository
+from src.query_feedback.repositories.feedback_repository import FeedbackRepository, normalize_query
 from src.query_feedback.service import QueryFeedbackService
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,34 @@ class FeedbackResponse(BaseModel):
     created_at: str
     updated_at: str | None
     stored: bool
+
+
+class FeedbackSummaryResponse(BaseModel):
+    total_feedback_items: int
+    queries_with_feedback: int
+    positive_feedback: int
+    negative_feedback: int
+    marginal_feedback: int
+    average_relevance: float
+
+
+class FeedbackItemResponse(BaseModel):
+    id: int
+    query: str
+    normalized_query: str
+    chunk_id: str
+    source_id: str | None
+    relevance: int
+    notes: str | None
+    session_id: str | None
+    created_at: str
+    updated_at: str | None
+
+
+class FeedbackByQueryResponse(BaseModel):
+    query: str
+    normalized_query: str
+    items: list[FeedbackItemResponse]
 
 
 class QueryFeedbackSearchWithFeedbackRequest(BaseModel):
@@ -243,6 +271,68 @@ async def store_feedback(
         created_at=record.created_at.isoformat(),
         updated_at=record.updated_at.isoformat() if record.updated_at is not None else None,
         stored=True,
+    )
+
+
+@router.get("/feedback/summary", response_model=FeedbackSummaryResponse)
+async def feedback_summary(request: Request) -> FeedbackSummaryResponse:
+    repository = FeedbackRepository(request.app.state.db_engine)
+    try:
+        summary = repository.get_summary()
+    except Exception as exc:
+        logger.exception("query_feedback_summary_failed")
+        raise HTTPException(status_code=500, detail="Feedback summary failed.") from exc
+
+    return FeedbackSummaryResponse(
+        total_feedback_items=summary.total_feedback_items,
+        queries_with_feedback=summary.queries_with_feedback,
+        positive_feedback=summary.positive_feedback,
+        negative_feedback=summary.negative_feedback,
+        marginal_feedback=summary.marginal_feedback,
+        average_relevance=summary.average_relevance,
+    )
+
+
+@router.get("/feedback", response_model=FeedbackByQueryResponse)
+async def feedback_by_query(
+    request: Request,
+    query: str = Query(...),
+    session_id: str | None = None,
+) -> FeedbackByQueryResponse:
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="query must not be empty")
+
+    normalized = normalize_query(query)
+    repository = FeedbackRepository(request.app.state.db_engine)
+    try:
+        records = repository.get_feedback_for_normalized_query(
+            normalized,
+            session_id=session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("query_feedback_lookup_failed")
+        raise HTTPException(status_code=500, detail="Feedback query lookup failed.") from exc
+
+    return FeedbackByQueryResponse(
+        query=query,
+        normalized_query=normalized,
+        items=[
+            FeedbackItemResponse(
+                id=record.id,
+                query=record.query,
+                normalized_query=record.normalized_query,
+                chunk_id=record.chunk_id,
+                source_id=record.source_id,
+                relevance=record.relevance,
+                notes=record.notes,
+                session_id=record.session_id,
+                created_at=record.created_at.isoformat(),
+                updated_at=record.updated_at.isoformat() if record.updated_at is not None else None,
+            )
+            for record in records
+        ],
     )
 
 

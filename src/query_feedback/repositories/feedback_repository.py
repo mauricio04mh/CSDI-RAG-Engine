@@ -8,7 +8,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from src.query_feedback.models import QueryFeedback
-from src.query_feedback.schemas import FeedbackRecord
+from src.query_feedback.schemas import FeedbackRecord, FeedbackSummary
 
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -81,6 +81,15 @@ class FeedbackRepository:
         session_id: str | None = None,
     ) -> list[FeedbackRecord]:
         normalized_query = normalize_query(query)
+        return self.get_feedback_for_normalized_query(normalized_query, session_id=session_id)
+
+    def get_feedback_for_normalized_query(
+        self,
+        normalized_query: str,
+        session_id: str | None = None,
+    ) -> list[FeedbackRecord]:
+        if not normalized_query.strip():
+            raise ValueError("normalized_query must not be empty")
         stmt = select(QueryFeedback).where(QueryFeedback.normalized_query == normalized_query)
         if session_id is not None:
             stmt = stmt.where(QueryFeedback.session_id == session_id)
@@ -126,6 +135,34 @@ class FeedbackRepository:
         with Session(self._engine) as session:
             rows = session.execute(stmt).scalars().all()
         return [self._to_feedback_record(row) for row in rows]
+
+    def get_summary(self) -> FeedbackSummary:
+        records = self.list_all_feedback()
+        if not records:
+            return FeedbackSummary(
+                total_feedback_items=0,
+                queries_with_feedback=0,
+                positive_feedback=0,
+                negative_feedback=0,
+                marginal_feedback=0,
+                average_relevance=0.0,
+            )
+
+        total_feedback_items = len(records)
+        queries_with_feedback = len({record.normalized_query for record in records})
+        positive_feedback = sum(1 for record in records if record.relevance in {2, 3})
+        negative_feedback = sum(1 for record in records if record.relevance == 0)
+        marginal_feedback = sum(1 for record in records if record.relevance == 1)
+        average_relevance = sum(record.relevance for record in records) / total_feedback_items
+
+        return FeedbackSummary(
+            total_feedback_items=total_feedback_items,
+            queries_with_feedback=queries_with_feedback,
+            positive_feedback=positive_feedback,
+            negative_feedback=negative_feedback,
+            marginal_feedback=marginal_feedback,
+            average_relevance=float(average_relevance),
+        )
 
     def _feedback_lookup_statement(
         self,
