@@ -12,6 +12,7 @@ from src.database.models.source_document_models import Base as SourceDocumentBas
 from src.database.models.vector_models import Base as VectorBase
 from src.database.models.web_cache_models import Base as WebCacheBase
 from src.database.models.web_search_models import Base as WebSearchBase
+from src.query_feedback.models import Base as QueryFeedbackBase
 
 config = context.config
 
@@ -25,6 +26,7 @@ target_metadata = [
     SourceDocumentBase.metadata,
     WebSearchBase.metadata,
     WebCacheBase.metadata,
+    QueryFeedbackBase.metadata,
 ]
 
 _DEFAULT_URL = "postgresql://raguser:ragpassword@localhost:5432/ragengine"
