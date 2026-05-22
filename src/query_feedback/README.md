@@ -10,6 +10,16 @@ It includes:
 - explicit relevance feedback handling
 - feedback-aware search and reranking flows
 
+## Endpoints
+
+- `GET /api/v1/query-feedback/health`
+- `POST /api/v1/query-feedback/expand`
+- `POST /api/v1/query-feedback/search`
+- `POST /api/v1/query-feedback/feedback`
+- `GET /api/v1/query-feedback/feedback?query=...`
+- `GET /api/v1/query-feedback/feedback/summary`
+- `POST /api/v1/query-feedback/search-with-feedback`
+
 ## Phase 1
 
 Phase 1 registers the base API skeleton and a module health route.
