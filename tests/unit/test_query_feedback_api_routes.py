@@ -66,6 +66,8 @@ if "numpy" not in sys.modules:
         array=lambda value, dtype=float: _asarray(value, dtype=dtype),
         asarray=_asarray,
         dot=_dot,
+        isscalar=lambda x: isinstance(x, (bool, int, float, complex)),
+        bool_=type("bool_", (), {}),
     )
 
 if "snowballstemmer" not in sys.modules:

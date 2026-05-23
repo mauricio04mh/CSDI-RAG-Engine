@@ -1,0 +1,401 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+
+\geometry{letterpaper, margin=2.5cm}
+
+\title{Informe del módulo de base de datos vectorial}
+\author{CSDI RAG Engine}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Módulo de base de datos vectorial}
+
+El módulo de base de datos vectorial es el componente responsable de transformar fragmentos
+de texto en representaciones numéricas densas, almacenarlas de forma persistente y permitir
+recuperarlas por similitud semántica. Su función dentro del sistema RAG es responder a la
+pregunta: dado el vector de una consulta, ¿qué fragmentos del corpus son semánticamente más
+cercanos a ella?
+
+Para cumplir esa función, el módulo integra tres tecnologías complementarias. Un modelo de
+embeddings transforma texto en vectores de alta dimensión que codifican significado semántico.
+Una estructura de índice especializada (\emph{HNSW}) permite buscar entre esos vectores de
+forma eficiente sin comparar contra todos los documentos. Una base de datos relacional persiste
+los vectores entre reinicios y actúa como fuente de verdad para reconstruir el índice en
+memoria cuando es necesario.
+
+La separación entre estas tres responsabilidades es deliberada: el modelo de embeddings puede
+cambiar sin afectar la estructura de búsqueda, y la base de datos puede reconstruir el índice
+en memoria si el archivo de índice en disco se corrompe o no existe.
+
+\paragraph{Componentes del módulo.}
+El módulo se organiza en cinco componentes con responsabilidades claramente delimitadas:
+
+\begin{itemize}
+\item \textbf{EmbeddingModel}: genera los vectores a partir de texto usando el modelo
+      \texttt{BAAI/bge-m3}.
+\item \textbf{FaissIndex}: encapsula el índice HNSW de FAISS y sus operaciones de adición y
+      búsqueda.
+\item \textbf{VectorStore}: mantiene en memoria el mapeo bidireccional entre identificadores
+      de posición FAISS (\emph{vector\_id}) e identificadores de documento (\emph{doc\_id}).
+\item \textbf{VectorIndexBuilder}: coordina la indexación de nuevos documentos: codificación
+      por lotes, actualización del índice y persistencia.
+\item \textbf{VectorRetriever}: ejecuta búsquedas sobre el índice y filtra documentos
+      eliminados antes de devolver resultados.
+\end{itemize}
+
+\section{Modelo de embeddings}
+
+\paragraph{Modelo seleccionado: BAAI/bge-m3.}
+El modelo de embeddings utilizado es \texttt{BAAI/bge-m3}, cargado mediante la biblioteca
+\texttt{sentence\_transformers}. Produce vectores de 1024 dimensiones con tipo
+\texttt{float32}. La elección de este modelo responde al perfil multilingüe del corpus: fue
+entrenado sobre datos en más de cien idiomas y produce representaciones compartidas entre
+lenguas, de modo que una consulta formulada en español y un fragmento escrito en inglés sobre
+el mismo concepto quedan proyectados a regiones cercanas del espacio vectorial. Un modelo
+monolingüe no puede satisfacer este requisito por diseño.
+
+\paragraph{Carga diferida y singleton.}
+El modelo no se carga al arrancar el servidor. La clase \texttt{EmbeddingModel} implementa
+un patrón de carga diferida (\emph{lazy loading}) protegido por un \texttt{threading.Lock}:
+el modelo se descarga y carga en memoria la primera vez que se invoca \texttt{encode()}, y
+la instancia resultante se reutiliza en todas las llamadas posteriores. Este diseño tiene dos
+ventajas concretas: el servidor arranca más rápido porque no espera a que el modelo
+(\textasciitilde{}570 MB para \texttt{bge-m3}) se cargue en memoria, y evita que múltiples
+hilos inicialicen el modelo simultáneamente durante el primer acceso.
+
+El modelo de embeddings es compartido entre el índice del corpus principal y el índice del
+caché web. Esto garantiza que los vectores de ambos espacios sean comparables y que no se
+duplique el consumo de memoria.
+
+\paragraph{Normalización L2 y similitud coseno.}
+Todos los vectores generados por el modelo se normalizan con norma L2 antes de insertarse
+en el índice. Esta normalización no es opcional: es la que hace que el producto interno entre
+dos vectores normalizados sea equivalente a la similitud coseno entre ellos. FAISS usa la
+métrica de producto interno (\texttt{METRIC\_INNER\_PRODUCT}), que sobre vectores normalizados
+produce exactamente los mismos rankings que la similitud coseno, pero es más rápida de calcular
+porque evita la raíz cuadrada de la norma.
+
+\paragraph{Codificación asimétrica con prefijo.}
+El modelo soporta codificación asimétrica mediante un prefijo de consulta configurable
+(\texttt{QUERY\_PREFIX}). Cuando se codifica una consulta, el prefijo se antepone al texto
+antes de la codificación; cuando se codifican documentos para indexación, el prefijo no se
+aplica. Esta asimetría permite ajustar el espacio vectorial para que las consultas queden
+posicionadas de forma más cercana a los documentos que las responden. El valor por defecto
+es cadena vacía (sin asimetría), lo que produce un espacio simétrico donde consultas y
+documentos se codifican de la misma forma.
+
+\section{Índice FAISS HNSW}
+
+\paragraph{Estructura del índice.}
+El índice vectorial es un \texttt{faiss.IndexHNSWFlat} con métrica de producto interno.
+HNSW (\emph{Hierarchical Navigable Small World}) es una estructura de grafo jerárquico que
+organiza los vectores en capas: las capas superiores tienen pocos nodos conectados por aristas
+largas (navegación rápida) y la capa inferior contiene todos los nodos con sus vecinos más
+cercanos reales. Una búsqueda navega desde la capa superior hacia la inferior, reduciendo
+progresivamente el conjunto de candidatos explorados.
+
+\paragraph{Parámetros de construcción.}
+El índice se construye con tres parámetros configurables:
+
+\begin{itemize}
+\item \textbf{M=32}: número máximo de conexiones por nodo en el grafo. Un valor mayor produce
+      un grafo más denso con mayor tasa de recuperación pero más memoria y tiempo de
+      construcción. El valor 32 es la configuración de alta calidad recomendada por Malkov
+      \& Yashunin (2020) para corpus de tamaño medio donde la precisión en los primeros
+      resultados es prioritaria.
+
+\item \textbf{ef\_construction=200}: tamaño de la lista dinámica de candidatos durante la
+      construcción del grafo. Un valor más alto produce un grafo mejor conectado a costa de
+      mayor tiempo de indexación. El valor 200 es el doble del valor por defecto de FAISS
+      (100) y garantiza que los vecinos reales de cada punto sean explorados con alta
+      probabilidad durante la construcción.
+
+\item \textbf{ef\_search=50}: tamaño de la lista dinámica de candidatos durante la búsqueda.
+      Controla el equilibrio entre exhaustividad y velocidad en tiempo de consulta. Un valor
+      de 50 recupera la mayoría de los vecinos reales para corpus de tamaño medio sin imponer
+      una latencia apreciable.
+\end{itemize}
+
+\paragraph{Adición de vectores y restricciones del índice.}
+Los vectores se añaden al índice en el orden en que son procesados por el builder. El índice
+HNSW de FAISS asigna identificadores enteros secuenciales (\emph{vector\_ids}) a cada vector
+insertado: el primero recibe el id 0, el segundo el 1, y así sucesivamente. Este índice no
+soporta eliminación de vectores ni actualización de posiciones una vez insertados. Las
+eliminaciones se gestionan mediante una estrategia de \emph{soft delete} descrita en la
+sección de eliminaciones.
+
+\paragraph{Persistencia del índice en disco.}
+Si la variable \texttt{FAISS\_INDEX\_PATH} está configurada, el índice se serializa a disco
+mediante \texttt{faiss.write\_index()} después de cada lote de documentos procesado. La
+persistencia en disco activa una ruta de carga rápida al arrancar: si el archivo existe, el
+índice se carga directamente sin reconstruir desde la base de datos. Esta ruta evita el costo
+de recodificar todos los embeddings almacenados al reiniciar el servidor.
+
+\section{VectorStore: mapeo en memoria}
+
+El \texttt{VectorStore} es la estructura de datos en memoria que resuelve el problema de
+identidad entre FAISS y el sistema de documentos. FAISS identifica vectores por su posición
+entera en el índice (\emph{vector\_id}); el sistema identifica documentos por su
+\emph{chunk\_id} textual. El \texttt{VectorStore} mantiene dos diccionarios: uno de
+\emph{vector\_id} a \emph{doc\_id} y otro en sentido inverso. También mantiene el conjunto
+de \emph{doc\_ids} marcados como eliminados.
+
+La integridad de estos mapeos es crítica: si la correspondencia entre \emph{vector\_id} y
+\emph{doc\_id} es incorrecta, una búsqueda puede devolver un fragmento completamente distinto
+al que corresponde al vector encontrado. Por eso el módulo valida al arrancar que el número
+de vectores en el índice FAISS cargado desde disco coincida exactamente con el número de
+documentos en la base de datos antes de confiar en el índice de disco.
+
+\section{Flujo de indexación}
+
+\paragraph{Encolamiento y procesamiento por lotes.}
+Cuando el sistema recibe un nuevo fragmento para indexar, el \texttt{VectorIndexBuilder}
+no lo codifica inmediatamente. El texto y su identificador se acumulan en un buffer en
+memoria. Cuando el buffer alcanza el tamaño de lote (\texttt{VECTOR\_BATCH\_SIZE=64}), o
+cuando se solicita un vaciado explícito, el builder codifica todos los textos del buffer
+en una sola llamada al modelo. Esta estrategia es significativamente más eficiente que
+codificar un texto a la vez: los modelos de embeddings están optimizados para procesar
+matrices de vectores, y el overhead de inicialización de cada llamada se amortiza entre
+todos los textos del lote.
+
+\paragraph{Secuencia de operaciones en un flush.}
+El vaciado del buffer ejecuta los pasos siguientes en orden:
+
+\begin{enumerate}
+\item \textbf{Codificación}: los textos del buffer se pasan al modelo de embeddings, que
+      devuelve una matriz \texttt{numpy} de forma $(n, 1024)$ con vectores normalizados en
+      \texttt{float32}.
+\item \textbf{Indexación FAISS}: la matriz se añade al índice HNSW con
+      \texttt{faiss.IndexHNSWFlat.add()}, que asigna vector\_ids secuenciales.
+\item \textbf{Actualización del VectorStore}: los pares (vector\_id, doc\_id) se registran
+      en los diccionarios bidireccionales del store.
+\item \textbf{Persistencia en base de datos}: los pares (doc\_id, vector) se insertan en la
+      tabla \texttt{vector\_documents} mediante un INSERT masivo.
+\item \textbf{Actualización de metadatos}: se actualiza \texttt{vector\_index\_metadata} con
+      el nuevo conteo de vectores y el modelo utilizado.
+\item \textbf{Escritura a disco}: si \texttt{FAISS\_INDEX\_PATH} está configurado, el índice
+      completo se serializa a disco.
+\end{enumerate}
+
+Todo este proceso está protegido por un \texttt{threading.RLock} que impide que búsquedas
+concurrentes accedan al índice mientras está siendo modificado.
+
+\section{Inicialización al arrancar}
+
+Al arrancar el servidor, el \texttt{VectorIndexBuilder} ejecuta su método \texttt{start()},
+que reconstruye el estado completo del índice siguiendo una de tres rutas en orden de
+preferencia:
+
+\paragraph{Ruta 1: carga desde disco.}
+Si \texttt{FAISS\_INDEX\_PATH} existe como archivo válido, el índice se deserializa con
+\texttt{faiss.read\_index()}. Antes de usarlo, se validan dos invariantes: que la dimensión
+del índice cargado coincida con \texttt{VECTOR\_DIMENSION=1024}, y que el número de vectores
+en el índice coincida con el número de documentos activos en la tabla
+\texttt{vector\_documents}. Si ambas validaciones pasan, el índice de disco es válido y se
+carga solo el listado de \emph{doc\_ids} desde la base de datos para reconstruir el
+\texttt{VectorStore}. Esta ruta es la más rápida: evita recodificar embeddings y carga solo
+metadatos ligeros.
+
+\paragraph{Ruta 2: reconstrucción desde base de datos.}
+Si el archivo de disco no existe, o si alguna validación de la ruta 1 falla, el builder lee
+todos los embeddings almacenados desde la tabla \texttt{vector\_documents} en lotes de 1000
+registros y los inserta en un índice FAISS recién creado. Esta ruta es más lenta porque
+requiere leer todos los vectores de la base de datos, pero garantiza que el índice en memoria
+sea consistente con la fuente de verdad persistente.
+
+\paragraph{Ruta 3: índice vacío.}
+Si no hay documentos en la base de datos, el builder inicializa un índice FAISS vacío listo
+para recibir los primeros documentos.
+
+\paragraph{Validación de metadatos del modelo.}
+Antes de ejecutar cualquiera de las tres rutas, el builder verifica que los metadatos
+almacenados en \texttt{vector\_index\_metadata} sean compatibles con la configuración actual.
+Si el modelo o la dimensión registrados en los metadatos difieren de los valores actuales, el
+sistema lanza un \texttt{RuntimeError} con un mensaje explícito que indica que las tablas de
+vectores deben ser truncadas antes de reiniciar. Este control evita que vectores generados
+con un modelo diferente se mezclen con los del modelo actual, lo que produciría rankings de
+similitud incorrectos.
+
+\section{Flujo de búsqueda}
+
+Una consulta de búsqueda vectorial sigue estos pasos:
+
+\begin{enumerate}
+\item \textbf{Codificación de la consulta}: el texto de la consulta se normaliza y codifica con
+      \texttt{EmbeddingModel.encode\_query()}, que antepone el prefijo configurado antes de
+      llamar al modelo. El resultado es un vector de forma $(1, 1024)$ en \texttt{float32}.
+\item \textbf{Búsqueda en FAISS}: bajo el \texttt{RLock}, se llama a
+      \texttt{FaissIndex.search(query\_vector, top\_k)}, que devuelve dos matrices: una de
+      puntuaciones de producto interno (\emph{scores}) y una de \emph{vector\_ids}, ambas de
+      forma $(1, \text{top\_k})$.
+\item \textbf{Resolución de identificadores}: para cada vector\_id devuelto, se consulta el
+      \texttt{VectorStore} para obtener el \emph{doc\_id} correspondiente. Los vector\_ids
+      negativos (padding de FAISS cuando hay menos resultados que top\_k) se ignoran.
+\item \textbf{Filtrado de eliminaciones}: los \emph{doc\_ids} que están en el conjunto de
+      documentos eliminados se excluyen del resultado sin devolver error.
+\item \textbf{Construcción del resultado}: los pares (doc\_id, score) válidos se empaquetan
+      como \texttt{VectorResult} y se devuelven al \texttt{HybridRetriever}.
+\end{enumerate}
+
+\section{Persistencia en base de datos}
+
+\paragraph{Esquema de tablas del corpus principal.}
+La tabla \texttt{vector\_documents} almacena un registro por fragmento indexado. Sus columnas
+son: un identificador entero autoincremental (\emph{id}), el identificador textual del
+fragmento (\emph{doc\_id}, único e indexado), el embedding como tipo \texttt{pgvector(1024)},
+la marca temporal de indexación y un campo \texttt{deleted\_at} nullable que implementa el
+soft delete.
+
+La tabla \texttt{vector\_index\_metadata} almacena un único registro (id=1) con los
+parámetros del índice actual: nombre del modelo de embeddings, dimensión de vectores, tipo
+de índice FAISS, parámetros HNSW y conteo total de vectores. Este registro se actualiza en
+cada flush y sirve para validar la compatibilidad del índice al arrancar.
+
+\paragraph{Uso de pgvector.}
+Los embeddings se almacenan usando la extensión \texttt{pgvector} de PostgreSQL, que define
+el tipo \texttt{Vector(1024)}. Esta extensión permite almacenar vectores de punto flotante de
+forma compacta y expone operadores SQL para búsquedas de similitud
+(\texttt{<->} para distancia L2, \texttt{<\#>} para producto interno negativo). En el diseño
+actual, las búsquedas de similitud se realizan exclusivamente a través de FAISS en memoria,
+no mediante consultas SQL con pgvector. La base de datos actúa como almacén persistente de
+los vectores, no como motor de búsqueda.
+
+\section{Eliminación de documentos}
+
+\paragraph{Estrategia de soft delete.}
+FAISS no soporta la eliminación de vectores individuales una vez insertados en un índice HNSW.
+El módulo resuelve esta limitación con una estrategia de \emph{soft delete}: los vectores
+permanecen en el índice FAISS, pero cuando un documento es eliminado, su \emph{doc\_id} se
+añade al conjunto \texttt{deleted\_doc\_ids} del \texttt{VectorStore} y se establece
+\texttt{deleted\_at} en la base de datos. Las búsquedas filtran los resultados de FAISS
+contra este conjunto antes de devolverlos, de modo que los documentos eliminados nunca
+aparecen en los resultados aunque sus vectores aún estén en el índice.
+
+\paragraph{Reclamación de espacio.}
+Los slots ocupados por documentos eliminados no se recuperan en tiempo de ejecución. La
+reclamación ocurre en el próximo reinicio del servidor: como la ruta de reconstrucción desde
+base de datos solo carga documentos con \texttt{deleted\_at IS NULL}, el índice reconstruido
+no contiene los vectores eliminados y el espacio queda libre. Si el servidor usa la ruta de
+carga desde disco y el número de documentos activos coincide con el índice de disco, los
+documentos eliminados previamente tampoco aparecerán porque el filtro del \texttt{VectorStore}
+sigue activo.
+
+\section{Índice vectorial del caché web}
+
+El caché web mantiene un índice vectorial paralelo al del corpus principal, con las mismas
+características técnicas pero en tablas separadas: \texttt{web\_cache\_vector\_documents} y
+\texttt{web\_cache\_vector\_index\_metadata}. El \texttt{VectorIndexBuilder} del caché web
+es una instancia independiente que opera sobre un \texttt{WebCacheVectorRepository} distinto,
+garantizando que los vectores web no se mezclen con los del corpus curado.
+
+La diferencia más relevante respecto al índice principal es que la tabla
+\texttt{web\_cache\_vector\_documents} no tiene columna \texttt{deleted\_at}: el caché web no
+implementa soft delete porque sus documentos se gestionan por reemplazo, no por eliminación
+selectiva. El modelo de embeddings, en cambio, es la misma instancia compartida con el índice
+principal: no se carga un segundo modelo en memoria, lo que mantiene el consumo de recursos
+bajo.
+
+El índice del caché web no persiste en disco (\texttt{FAISS\_INDEX\_PATH} no se aplica al
+caché). En cada reinicio se reconstruye desde la base de datos, lo que es aceptable porque el
+número de documentos en el caché crece más lentamente que el corpus principal.
+
+\section{Configuración y parámetros clave}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Variable} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{EMBEDDING\_MODEL} & \texttt{BAAI/bge-m3} & Modelo de sentence-transformers \\
+\texttt{VECTOR\_DIMENSION} & 1024 & Dimensión de los vectores \\
+\texttt{FAISS\_INDEX\_TYPE} & \texttt{HNSW} & Tipo de índice FAISS \\
+\texttt{HNSW\_M} & 32 & Conexiones máximas por nodo \\
+\texttt{HNSW\_EF\_CONSTRUCTION} & 200 & Candidatos durante construcción \\
+\texttt{HNSW\_EF\_SEARCH} & 50 & Candidatos durante búsqueda \\
+\texttt{VECTOR\_BATCH\_SIZE} & 64 & Tamaño del lote de codificación \\
+\texttt{QUERY\_PREFIX} & (vacío) & Prefijo para codificación de consultas \\
+\texttt{FAISS\_INDEX\_PATH} & (vacío) & Ruta de persistencia del índice FAISS \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La variable \texttt{VECTOR\_DIMENSION} debe coincidir con la dimensión de salida del modelo
+configurado en \texttt{EMBEDDING\_MODEL}. Si se cambia el modelo por uno de dimensión
+distinta sin actualizar \texttt{VECTOR\_DIMENSION}, el sistema lanzará un error al intentar
+insertar vectores de dimensión incorrecta en el índice. Si se cambia el modelo manteniendo
+\texttt{VECTOR\_DIMENSION}, el sistema arrancará pero los vectores del índice existente y
+los nuevos serán incomparables, produciendo rankings de similitud sin sentido. El mecanismo
+de validación de metadatos al arrancar detecta este segundo caso y bloquea el inicio.
+
+\section{Justificación técnica de la solución}
+
+El módulo de base de datos vectorial existe porque la recuperación léxica (BM25) no puede
+por sí sola responder consultas que usan vocabulario distinto al del corpus. Un sistema RAG
+que solo usa BM25 falla ante paráfrasis, consultas en idioma diferente al de los documentos
+o preguntas conceptuales. Los embeddings densos resuelven este problema proyectando texto
+con significado equivalente a regiones cercanas del espacio vectorial independientemente del
+vocabulario exacto.
+
+\paragraph{Por qué HNSW sobre un índice plano.}
+La alternativa más simple a HNSW es un índice plano: se compara el vector de consulta contra
+todos los vectores del corpus en tiempo lineal. Para corpus pequeños esto es exacto y
+suficiente, pero escala mal: con 100.000 fragmentos y vectores de 1024 dimensiones, cada
+búsqueda requeriría calcular 100 millones de productos internos. HNSW reduce ese costo a un
+subconjunto logarítmico del corpus sin pérdida apreciable de calidad para los parámetros
+configurados. Los índices de cuantización como IVF (Inverted File Index) también son más
+rápidos que el índice plano, pero requieren una fase de entrenamiento sobre el corpus antes
+de poder usarse, lo que añade complejidad al proceso de indexación y puede perder calidad en
+corpus pequeños o poco densos.
+
+\paragraph{Por qué la base de datos como fuente de verdad.}
+El índice FAISS en memoria es una estructura efímera: no sobrevive reinicios del servidor a
+menos que se persista explícitamente a disco. La base de datos relacional actúa como la fuente
+de verdad persistente desde la cual el índice puede reconstruirse en cualquier momento. Esta
+separación de responsabilidades garantiza que los datos no se pierdan ante un fallo del
+servidor, y que el sistema pueda recuperarse automáticamente sin intervención manual si el
+archivo de índice en disco se corrompe o se elimina. El costo de la reconstrucción desde base
+de datos es asumible en el arranque porque es una operación infrecuente; el costo de una
+búsqueda posterior, que opera sobre el índice en memoria, no se ve afectado.
+
+\paragraph{Por qué soft delete y no eliminación directa.}
+La limitación de FAISS que impide eliminar vectores individuales en HNSW podría sortearse
+reconstruyendo el índice completo cada vez que se elimina un documento, pero eso haría de
+cada eliminación una operación O(n) sobre el corpus. El soft delete convierte cada eliminación
+en una operación O(1) (añadir un identificador a un conjunto en memoria y actualizar un campo
+en base de datos) a costa de que los vectores eliminados ocupen espacio en el índice hasta el
+próximo reinicio. Para el dominio del sistema, donde las eliminaciones son infrecuentes y el
+corpus no crece sin límite, este compromiso es adecuado.
+
+\section{Limitaciones del módulo}
+
+El modelo de embeddings se carga en CPU sin posibilidad de configurar una GPU mediante
+variables de entorno. Para corpus con decenas de miles de documentos, la codificación en CPU
+puede ser el cuello de botella del proceso de indexación masiva inicial. La búsqueda sobre el
+índice HNSW en memoria no se ve afectada por este límite porque FAISS opera eficientemente
+en CPU.
+
+El índice HNSW no soporta actualizaciones incrementales de vectores. Si el texto de un
+fragmento cambia, el vector antiguo permanece en el índice y el nuevo se añade como un
+registro adicional, con el anterior siendo soft-deleted. Esto puede incrementar el tamaño del
+índice con el tiempo en corpus con alta tasa de actualización.
+
+La validación de compatibilidad del modelo al arrancar es una comprobación por nombre y
+dimensión, no una comprobación por hash del modelo. Si se instala una versión diferente del
+mismo modelo con el mismo nombre pero pesos distintos, el sistema no lo detectará y los
+vectores del índice existente y los nuevos serán incomparables.
+
+El caché web no tiene política de expiración de vectores. Fragmentos de búsquedas antiguas
+permanecen en \texttt{web\_cache\_vector\_documents} indefinidamente, lo que puede hacer
+crecer el índice del caché sin límite y degradar el rendimiento de búsqueda sobre él con el
+tiempo.
+
+\end{document}

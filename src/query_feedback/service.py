@@ -297,14 +297,26 @@ class QueryFeedbackService:
             grouped_records[record.normalized_query].append(record)
             representatives.setdefault(record.normalized_query, record)
 
+        candidate_items = [
+            (nq, rep)
+            for nq, rep in representatives.items()
+            if nq != normalized_query
+        ]
+        if not candidate_items:
+            return {}, []
+
         current_query_embedding = self._query_embedding(query)
+
+        # Batch encode all candidate queries in a single inference call instead of N calls.
+        candidate_normalized_queries = [nq for nq, _ in candidate_items]
+        candidate_queries = [rep.query for _, rep in candidate_items]
+        candidate_embeddings = self._query_embeddings_batch(candidate_queries)
+
         semantic_matches: dict[str, FeedbackMatch] = {}
         matched_feedback_queries: list[dict[str, str | float]] = []
 
-        for candidate_normalized_query, representative in representatives.items():
-            if candidate_normalized_query == normalized_query:
-                continue
-            similarity = self._query_similarity(current_query_embedding, representative.query)
+        for idx, (candidate_normalized_query, representative) in enumerate(candidate_items):
+            similarity = self._dot_product(current_query_embedding, candidate_embeddings[idx])
             if similarity < semantic_similarity_threshold:
                 continue
             matched_feedback_queries.append({
@@ -334,6 +346,16 @@ class QueryFeedbackService:
             )
         )
         return semantic_matches, matched_feedback_queries
+
+    def _query_embeddings_batch(self, queries: list[str]) -> list:
+        """Encode multiple queries in one batch call when the model supports it."""
+        if not queries:
+            return []
+        encode_batch = getattr(self._embedding_model, "encode", None)
+        if encode_batch is not None:
+            texts = [f"{self._query_prefix}{q}" if self._query_prefix else q for q in queries]
+            return encode_batch(texts)
+        return [self._query_embedding(q) for q in queries]
 
     def _query_similarity(
         self,
