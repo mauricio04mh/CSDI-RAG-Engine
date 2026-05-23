@@ -4,10 +4,11 @@ import hashlib
 import logging
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
+from src.database.repositories.source_document_repository import SourceDocumentRepository
 from src.ingestion.progress_tracker import IngestionTracker
 from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
 from src.sources_config.schemas import ScraperConfig, SourceConfig
@@ -49,6 +50,33 @@ class IngestProgressResponse(BaseModel):
     error: str | None
 
 
+class SourceDocumentListItem(BaseModel):
+    document_id: str
+    source_id: str
+    url: str
+    title: str
+    breadcrumb: str
+    content_type: str
+    http_status: int
+    crawl_depth: int | None
+    fetched_at: str | None
+    last_seen_at: str | None
+    published_at: str | None
+    document_updated_at: str | None
+    created_at: str | None
+    updated_at: str | None
+    is_active: bool
+    text_preview: str
+
+
+class SourceDocumentListResponse(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    items: list[SourceDocumentListItem]
+
+
 def _is_http_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
@@ -81,6 +109,42 @@ def _build_dynamic_source(url: str) -> SourceConfig:
             code_block_selectors=["pre code", "code"],
             exclude_selectors=["script", "style", "noscript"],
         ),
+    )
+
+
+def _isoformat(value) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _text_preview(value: str, max_length: int = 240) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= max_length:
+        return normalized
+    return normalized[: max_length - 3].rstrip() + "..."
+
+
+def _to_document_item(document) -> SourceDocumentListItem:
+    return SourceDocumentListItem(
+        document_id=document.document_id,
+        source_id=document.source_id,
+        url=document.url,
+        title=document.title,
+        breadcrumb=document.breadcrumb,
+        content_type=document.content_type,
+        http_status=document.http_status,
+        crawl_depth=document.crawl_depth,
+        fetched_at=_isoformat(document.fetched_at),
+        last_seen_at=_isoformat(document.last_seen_at),
+        published_at=_isoformat(document.published_at),
+        document_updated_at=_isoformat(document.document_updated_at),
+        created_at=_isoformat(document.created_at),
+        updated_at=_isoformat(document.updated_at),
+        is_active=document.is_active,
+        text_preview=_text_preview(document.text_content),
     )
 
 
@@ -192,6 +256,32 @@ def deindex_source(source_id: str, request: Request) -> DeindexResponse:
         chunks_deleted=chunks_deleted,
         vectors_deleted=vectors_deleted,
         documents_deleted=documents_deleted,
+    )
+
+
+@router.get("/documents", response_model=SourceDocumentListResponse)
+def list_scraped_documents(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    source_id: str | None = Query(default=None, min_length=1),
+    active_only: bool = Query(default=True),
+) -> SourceDocumentListResponse:
+    """List scraped documents ordered by fetched_at DESC, id DESC."""
+    source_document_repo: SourceDocumentRepository = request.app.state.source_document_repo
+    items, total = source_document_repo.list_documents(
+        page=page,
+        page_size=page_size,
+        source_id=source_id,
+        active_only=active_only,
+    )
+    total_pages = (total + page_size - 1) // page_size if total else 0
+    return SourceDocumentListResponse(
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+        items=[_to_document_item(item) for item in items],
     )
 
 
