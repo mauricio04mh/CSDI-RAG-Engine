@@ -32,6 +32,7 @@ from src.generation.rag_pipeline import RAGPipeline
 from src.hybrid.api.routes import router as search_router
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
 from src.ingestion.chunk_ingestion_service import ChunkIngestionService
+from src.ingestion.progress_tracker import IngestionTracker
 from src.indexing.api.routes import router as indexing_router
 from src.indexing.builder.index_builder import IndexBuilder
 from src.indexing.config.settings import load_settings as load_indexing_settings
@@ -41,6 +42,7 @@ from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
 from src.query_feedback.api.routes import router as query_feedback_router
 from src.reranker.cross_encoder_reranker import CrossEncoderReranker
 from src.sources_config.source_config_repository import SourceConfigRepository
+from src.sources_config.user_source_repository import UserSourceRepository
 from src.vector_indexing.api.routes import router as vector_indexing_router
 from src.vector_indexing.config.settings import load_settings as load_vector_settings
 from src.vector_indexing.pipeline.vector_index_builder import VectorIndexBuilder
@@ -90,6 +92,7 @@ def create_app() -> FastAPI:
     )
 
     source_repo = SourceConfigRepository()
+    user_source_repo = UserSourceRepository()
     chunk_repo = ChunkRepository(engine)
     source_document_repo = SourceDocumentRepository(engine)
     chunk_ingestion_service = ChunkIngestionService(
@@ -98,10 +101,12 @@ def create_app() -> FastAPI:
         vector_index_builder=vector_index_builder,
         bm25_retriever=bm25_retriever,
     )
+    ingestion_tracker = IngestionTracker()
     ingestion_orchestrator = IngestionOrchestrator(
         source_repo=source_repo,
         chunk_ingestion=chunk_ingestion_service,
         source_document_repo=source_document_repo,
+        tracker=ingestion_tracker,
     )
 
     web_cache_chunk_repo = WebCacheChunkRepository(engine)
@@ -225,6 +230,7 @@ def create_app() -> FastAPI:
         app.state.vector_retriever = vector_retriever
         app.state.hybrid_retriever = hybrid_retriever
         app.state.source_repo = source_repo
+        app.state.user_source_repo = user_source_repo
         app.state.chunk_repo = chunk_repo
         app.state.source_document_repo = source_document_repo
         app.state.chunk_ingestion_service = chunk_ingestion_service
@@ -234,10 +240,18 @@ def create_app() -> FastAPI:
         app.state.web_cache_vector_index_builder = web_cache_vector_index_builder
         app.state.web_cache_hybrid_retriever = web_cache_hybrid_retriever
         app.state.ingestion_orchestrator = ingestion_orchestrator
+        app.state.ingestion_tracker = ingestion_tracker
         app.state.rag_pipeline = rag_pipeline
         app.state.chat_history_store = chat_history_store
         app.state.llm_client = llm_client
         app.state.reranker_model = generation_settings.reranker_model
+        # Seed tracker history from DB for sources indexed before the tracker existed
+        _all_source_ids = (
+            [s.source_id for s in source_repo.list_sources()]
+            + [s.source_id for s in user_source_repo.list_sources()]
+        )
+        ingestion_tracker.seed_from_db(chunk_repo.max_created_at_by_source_ids(_all_source_ids))
+
         index_builder.start()
         bm25_retriever.start()
         vector_index_builder.start()

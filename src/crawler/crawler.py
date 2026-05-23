@@ -63,11 +63,18 @@ class Crawler:
 
     def crawl(self, source: SourceConfig) -> CrawlResult:
         result = CrawlResult(source_id=source.source_id)
+        for page in self.crawl_iter(source):
+            result.pages.append(page)
+        return result
+
+    def crawl_iter(self, source: SourceConfig):
+        """Yield pages one at a time as they are fetched (pipeline-friendly)."""
+        from typing import Iterator  # local to avoid circular at module level
         visited: set[str] = set()
         robots_cache: dict[str, RobotsPolicy] = {}
         next_request_at: dict[str, float] = {}
+        total = 0
 
-        # queue entries: (url, current_depth)
         queue: deque[tuple[str, int, str | None]] = deque(
             (url, 0, None) for url in source.seed_urls
         )
@@ -77,7 +84,7 @@ class Crawler:
             timeout=source.request_timeout_seconds or self._timeout,
             follow_redirects=True,
         ) as client:
-            while queue and result.total < source.max_pages:
+            while queue and total < source.max_pages:
                 url, depth, discovered_from_url = queue.popleft()
                 url = self._normalize(url, source)
 
@@ -100,20 +107,17 @@ class Crawler:
                     discovered_from_url=discovered_from_url,
                 )
 
-                result.pages.append(page)
-                logger.info(
-                    "crawled url=%s depth=%s total=%s", url, depth, result.total
-                )
+                total += 1
+                logger.info("crawled url=%s depth=%s total=%s", url, depth, total)
 
                 if depth < source.max_depth:
                     for link in self._extract_links(page.html, url, source):
                         if link not in visited:
                             queue.append((link, depth + 1, url))
 
-        logger.info(
-            "crawl_finished source=%s pages=%s", source.source_id, result.total
-        )
-        return result
+                yield page
+
+        logger.info("crawl_finished source=%s pages=%s", source.source_id, total)
 
     def _fetch(self, client: httpx.Client, url: str, source: SourceConfig) -> CrawledPage | None:
         attempts = max(source.max_retries, 0) + 1

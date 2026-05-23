@@ -24,6 +24,9 @@ class CrawlStageService:
     def crawl(self, source: SourceConfig) -> CrawlResult:
         return self._crawler.crawl(source)
 
+    def crawl_iter(self, source: SourceConfig):
+        return self._crawler.crawl_iter(source)
+
 
 class ScrapeStageService:
     def __init__(self, scraper: Scraper) -> None:

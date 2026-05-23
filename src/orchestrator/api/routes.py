@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.bm25.pipeline.bm25_retriever import BM25Retriever
+from src.ingestion.progress_tracker import IngestionTracker
 from src.orchestrator.ingestion_orchestrator import IngestionOrchestrator
 from src.sources_config.schemas import ScraperConfig, SourceConfig
 
@@ -26,6 +27,19 @@ class IngestResponse(BaseModel):
     pages_scraped: int
     chunks_produced: int
     chunks_indexed: int
+
+
+class IngestProgressResponse(BaseModel):
+    source_id: str
+    phase: str
+    pages_total: int
+    pages_scraped: int
+    chunks_indexed: int
+    progress_pct: float
+    started_at: str | None
+    finished_at: str | None
+    last_ingest_at: str | None
+    error: str | None
 
 
 def _is_http_url(value: str) -> bool:
@@ -67,20 +81,37 @@ def _build_dynamic_source(url: str) -> SourceConfig:
 def ingest_source(payload: IngestSourceRequest, request: Request) -> IngestResponse:
     """Crawl, scrape, chunk and index all pages for a configured source."""
     orchestrator: IngestionOrchestrator = request.app.state.ingestion_orchestrator
+    tracker: IngestionTracker = request.app.state.ingestion_tracker
     source_repo = request.app.state.source_repo
+    user_source_repo = request.app.state.user_source_repo
+
+    # For URL manual sources the tracker runs under the dynamic source_id, not the raw URL.
+    effective_source_id = payload.source_id
 
     try:
         if source_repo.exists(payload.source_id):
             report = orchestrator.ingest(payload.source_id)
         elif _is_http_url(payload.source_id):
-            report = orchestrator.ingest_source(_build_dynamic_source(payload.source_id))
+            dynamic_source = _build_dynamic_source(payload.source_id)
+            effective_source_id = dynamic_source.source_id
+            report = orchestrator.ingest_source(dynamic_source)
+            user_source_repo.register(
+                source_id=dynamic_source.source_id,
+                name=dynamic_source.name,
+                base_url=payload.source_id,
+                source_kind="url_manual",
+            )
         else:
             raise HTTPException(status_code=404, detail=f"Source '{payload.source_id}' not found.")
     except HTTPException:
+        tracker.fail(effective_source_id, "not_found")
         raise
     except Exception as exc:
-        logger.exception("ingestion_failed source=%s", payload.source_id)
+        tracker.fail(effective_source_id, str(exc))
+        logger.exception("ingestion_failed source=%s", effective_source_id)
         raise HTTPException(status_code=500, detail="Ingestion failed.") from exc
+
+    tracker.complete(effective_source_id)
 
     # Reload BM25 in-memory index so new segments are visible to search immediately
     if report.chunks_indexed > 0:
@@ -98,14 +129,29 @@ def ingest_source(payload: IngestSourceRequest, request: Request) -> IngestRespo
     )
 
 
+@router.get("/progress/{source_id}", response_model=IngestProgressResponse)
+def get_ingest_progress(source_id: str, request: Request) -> IngestProgressResponse:
+    """Return the current ingestion progress for a source."""
+    tracker: IngestionTracker = request.app.state.ingestion_tracker
+    data = tracker.to_dict(source_id)
+    return IngestProgressResponse(**data)
+
+
 @router.get("/sources", tags=["ingestion"])
 def list_sources(request: Request) -> list[dict]:
-    """List all configured ingestion sources."""
+    """List all configured ingestion sources plus user-added sources."""
     source_repo = request.app.state.source_repo
     chunk_repo = request.app.state.chunk_repo
-    sources = source_repo.list_sources()
-    counts = chunk_repo.count_by_source_ids([s.source_id for s in sources])
-    return [
+    tracker: IngestionTracker = request.app.state.ingestion_tracker
+    user_source_repo = request.app.state.user_source_repo
+
+    configured = source_repo.list_sources()
+    user_sources = user_source_repo.list_sources()
+
+    all_ids = [s.source_id for s in configured] + [s.source_id for s in user_sources]
+    counts = chunk_repo.count_by_source_ids(all_ids)
+
+    result = [
         {
             "source_id": s.source_id,
             "name": s.name,
@@ -114,6 +160,27 @@ def list_sources(request: Request) -> list[dict]:
             "seed_urls": s.seed_urls,
             "max_depth": s.max_depth,
             "indexed_chunks": counts.get(s.source_id, 0),
+            "last_ingest_at": tracker.last_ingest_at(s.source_id),
+            "ingest_status": tracker.to_dict(s.source_id)["phase"],
+            "progress_pct": tracker.to_dict(s.source_id)["progress_pct"],
+            "source_kind": "configured",
         }
-        for s in sources
+        for s in configured
     ]
+
+    for s in user_sources:
+        result.append({
+            "source_id": s.source_id,
+            "name": s.name,
+            "base_url": s.base_url,
+            "technology": [],
+            "seed_urls": [],
+            "max_depth": 0,
+            "indexed_chunks": counts.get(s.source_id, 0),
+            "last_ingest_at": tracker.last_ingest_at(s.source_id),
+            "ingest_status": tracker.to_dict(s.source_id)["phase"],
+            "progress_pct": tracker.to_dict(s.source_id)["progress_pct"],
+            "source_kind": s.source_kind,
+        })
+
+    return result
