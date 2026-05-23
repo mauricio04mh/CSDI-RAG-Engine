@@ -97,6 +97,7 @@ Ingesta:
 
 - `POST /api/v1/ingest`
 - `GET /api/v1/ingest/sources`
+- `GET /api/v1/ingest/documents`
 
 Configuración:
 

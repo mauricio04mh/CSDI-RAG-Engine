@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -77,3 +77,35 @@ class SourceDocumentRepository:
             return session.execute(
                 select(SourceDocument).where(SourceDocument.document_id == document_id)
             ).scalar_one_or_none()
+
+    def list_documents(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        source_id: str | None = None,
+        active_only: bool = True,
+    ) -> tuple[list[SourceDocument], int]:
+        """Return one page of scraped documents ordered by fetch time."""
+        filters = []
+        if source_id is not None:
+            filters.append(SourceDocument.source_id == source_id)
+        if active_only:
+            filters.append(SourceDocument.is_active.is_(True))
+
+        offset = (page - 1) * page_size
+        count_stmt = select(func.count()).select_from(SourceDocument)
+        items_stmt = (
+            select(SourceDocument)
+            .order_by(SourceDocument.fetched_at.desc(), SourceDocument.id.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        if filters:
+            count_stmt = count_stmt.where(*filters)
+            items_stmt = items_stmt.where(*filters)
+
+        with Session(self.engine) as session:
+            total = session.execute(count_stmt).scalar_one()
+            items = session.execute(items_stmt).scalars().all()
+        return list(items), int(total)
