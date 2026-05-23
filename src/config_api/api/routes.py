@@ -84,14 +84,42 @@ def _available_models(provider: str) -> list[str]:
 
 def _query_feedback_comparison_probability(config: dict | None = None) -> float:
     persisted_config = config if config is not None else load_config_from_disk()
+    candidate = None
+    source = "default"
+
     if "query_feedback_comparison_probability" in persisted_config:
-        return float(persisted_config["query_feedback_comparison_probability"])
-    return float(
-        os.getenv(
-            "QUERY_FEEDBACK_COMPARISON_PROBABILITY",
-            str(_DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY),
+        candidate = persisted_config["query_feedback_comparison_probability"]
+        source = "persisted"
+    else:
+        env_value = os.getenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY")
+        if env_value is not None:
+            candidate = env_value
+            source = "env"
+
+    if candidate is None:
+        return _DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY
+
+    try:
+        value = float(candidate)
+    except (TypeError, ValueError):
+        logger.warning(
+            "invalid_query_feedback_comparison_probability source=%s value=%r fallback=%s",
+            source,
+            candidate,
+            _DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY,
         )
-    )
+        return _DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY
+
+    if not 0.0 <= value <= 1.0:
+        logger.warning(
+            "out_of_range_query_feedback_comparison_probability source=%s value=%r fallback=%s",
+            source,
+            candidate,
+            _DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY,
+        )
+        return _DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY
+
+    return value
 
 
 class InsuffConfig(BaseModel):

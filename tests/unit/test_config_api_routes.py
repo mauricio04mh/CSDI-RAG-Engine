@@ -52,6 +52,7 @@ if "snowballstemmer" not in sys.modules:
 
 from src.config_api.api.routes import (
     PipelineConfigUpdate,
+    _query_feedback_comparison_probability,
     get_config,
     router,
     update_config,
@@ -148,6 +149,60 @@ def test_get_config_returns_query_feedback_comparison_probability(
     response = get_config(_build_request(app))
 
     assert response.query_feedback_comparison_probability == 0.4
+
+
+def test_query_feedback_comparison_probability_persisted_value_has_priority_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY", "0.9")
+
+    value = _query_feedback_comparison_probability({
+        "query_feedback_comparison_probability": 0.4,
+    })
+
+    assert value == 0.4
+
+
+def test_query_feedback_comparison_probability_invalid_env_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY", "not-a-number")
+
+    value = _query_feedback_comparison_probability({})
+
+    assert value == 0.25
+
+
+def test_query_feedback_comparison_probability_env_below_range_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY", "-0.1")
+
+    value = _query_feedback_comparison_probability({})
+
+    assert value == 0.25
+
+
+def test_query_feedback_comparison_probability_env_above_range_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY", "1.1")
+
+    value = _query_feedback_comparison_probability({})
+
+    assert value == 0.25
+
+
+def test_query_feedback_comparison_probability_invalid_persisted_value_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("QUERY_FEEDBACK_COMPARISON_PROBABILITY", "0.8")
+
+    value = _query_feedback_comparison_probability({
+        "query_feedback_comparison_probability": "invalid",
+    })
+
+    assert value == 0.25
 
 
 def test_post_config_updates_and_persists_query_feedback_comparison_probability(
