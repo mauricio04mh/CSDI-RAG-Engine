@@ -1,0 +1,496 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+
+\geometry{letterpaper, margin=2.5cm}
+
+\title{Informe del módulo de interfaz visual}
+\author{CSDI RAG Engine}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Módulo de interfaz visual}
+
+El módulo de interfaz visual es la capa de presentación del sistema CSDI RAG Engine. Su
+responsabilidad es exponer todas las capacidades del backend a través de una aplicación web
+interactiva que un operador o usuario final puede utilizar desde un navegador, sin necesidad
+de interactuar directamente con la API REST ni con herramientas de línea de comandos.
+
+La interfaz no implementa lógica de negocio: actúa como cliente de la API del servidor, que
+opera en el puerto configurado por la variable \texttt{APP\_PORT} (por defecto \texttt{8888}).
+Todos los datos que muestra provienen de respuestas de esa API; no existe estado local
+persistente en el cliente más allá del identificador de sesión de conversación. Esta separación
+es deliberada: mantener la interfaz como cliente puro de la API garantiza que cualquier
+modificación al pipeline, al índice o a los modelos sea inmediatamente reflejada en lo que
+muestra la interfaz, sin necesidad de coordinar cambios entre capas.
+
+La interfaz está compuesta por ocho secciones principales, cada una dedicada a un dominio
+funcional distinto del sistema: consulta en lenguaje natural, historial de conversación,
+búsqueda directa sobre el índice, configuración del pipeline, gestión de fuentes e ingesta,
+monitorización operativa, retroalimentación de consultas y evaluación de calidad.
+
+\section{Panel de chat RAG}
+
+\paragraph{Función del panel.}
+Es la sección de uso cotidiano del sistema. Permite formular preguntas en texto libre y recibir
+respuestas generadas por el modelo de lenguaje, fundamentadas en fragmentos recuperados del
+corpus de documentación interno o de la web. Es el punto de entrada principal para cualquier
+usuario que desee consultar información del corpus sin conocer la estructura del índice.
+
+\paragraph{Datos presentados.}
+La respuesta del endpoint \texttt{POST /api/v1/rag/query} incluye todos los campos necesarios
+para que la interfaz muestre tanto la respuesta como su procedencia completa. El campo
+\textbf{answer} contiene el texto generado por el modelo en español. El campo \textbf{sources}
+es una lista de fragmentos utilizados para construir la respuesta: cada fuente incluye el
+título del documento, la URL de origen, el tipo de fuente (\texttt{corpus} o
+\texttt{web\_cache}), el método de recuperación (\texttt{bm25}, \texttt{vector},
+\texttt{hybrid} o \texttt{web\_cache}), la puntuación de relevancia, la puntuación de frescura,
+la prioridad de visualización y el rango de posicionamiento. El campo \textbf{model} identifica
+el modelo exacto que generó la respuesta. Los campos \textbf{prompt\_tokens} y
+\textbf{completion\_tokens} reportan el consumo de tokens de la llamada. Cuando se ejecutó
+búsqueda web, los campos \textbf{cache\_searched}, \textbf{cache\_hits},
+\textbf{external\_search\_executed} y \textbf{external\_indexed\_count} informan sobre el
+alcance de esa búsqueda.
+
+La respuesta presenta una separación visual entre la información proveniente del corpus interno
+y la obtenida de búsqueda web. Cuando todos los fragmentos son del corpus, la respuesta no
+incluye ninguna indicación de búsqueda web. Cuando los fragmentos son exclusivamente de la web,
+la respuesta indica explícitamente que no se encontró información en el corpus interno. Cuando
+hay fragmentos de ambas fuentes, la respuesta distingue qué parte de la información proviene
+de cada origen.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Descripción} \\
+\midrule
+\texttt{query}      & Pregunta en texto libre. Longitud mínima: 1 carácter. \\
+\texttt{session\_id} & Identificador de sesión opcional (8--128 caracteres alfanuméricos
+                       y guiones). Cuando se incluye, el intercambio queda registrado en
+                       el historial de conversación. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Panel de historial de conversación}
+
+\paragraph{Función del panel.}
+Muestra la secuencia completa de preguntas y respuestas de una sesión identificada por su
+\texttt{session\_id}. Permite al usuario revisar interacciones anteriores sin necesidad de
+repetir consultas. El historial es consultable en cualquier momento durante el tiempo de vida
+de la sesión, que por defecto es de 7 días (\texttt{CHAT\_HISTORY\_TTL\_SECONDS=604800}),
+renovado en cada intercambio.
+
+\paragraph{Datos presentados.}
+El endpoint \texttt{GET /api/v1/rag/history/\{session\_id\}} devuelve una lista ordenada de
+mensajes. Cada entrada incluye un identificador único, el tipo de mensaje (\texttt{"user"} para
+preguntas, \texttt{"assistant"} para respuestas), el contenido textual, la marca temporal en
+formato ISO 8601, la lista de fuentes citadas y el nombre del modelo utilizado en el caso de
+los mensajes del asistente.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Descripción} \\
+\midrule
+\texttt{session\_id} & Identificador de sesión a consultar. Debe coincidir con el usado
+                       durante las consultas en el panel de chat. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Panel de búsqueda híbrida}
+
+\paragraph{Función del panel.}
+Permite ejecutar búsquedas directas sobre el índice sin pasar por el modelo generativo.
+Su utilidad principal es exploratoria y de diagnóstico: permite verificar qué fragmentos
+recupera el sistema ante una consulta concreta, comparar los resultados de la búsqueda
+léxica frente a la vectorial, y depurar el comportamiento del pipeline de recuperación.
+Expone tres modalidades: búsqueda híbrida sobre el corpus, búsqueda híbrida sobre el caché
+web y búsqueda con expansión por retroalimentación de consultas.
+
+\paragraph{Datos presentados.}
+El endpoint \texttt{POST /api/v1/search} devuelve por cada resultado el identificador del
+fragmento (\texttt{chunk\_id}), la puntuación de relevancia RRF (\texttt{score}), la URL
+del documento de origen, el título, el \emph{breadcrumb} de navegación, el texto completo
+del fragmento y el conjunto \texttt{found\_by}, que indica si el fragmento fue encontrado
+por BM25, por el recuperador vectorial o por ambos. La búsqueda sobre el caché web
+(\texttt{POST /api/v1/search/web-cache}) devuelve la misma estructura pero limitada a los
+fragmentos indexados de búsquedas web anteriores.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Descripción} \\
+\midrule
+\texttt{query}      & Texto de la consulta a ejecutar. \\
+\texttt{top\_k}     & Número máximo de resultados a devolver. \\
+\texttt{source\_ids} & Lista opcional de identificadores de fuente para filtrar los
+                       resultados a una o varias fuentes específicas. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Panel de configuración del pipeline}
+
+\paragraph{Función del panel.}
+Es la sección de mayor impacto operativo del sistema. Permite ajustar en tiempo de ejecución
+todos los parámetros que controlan el comportamiento del pipeline RAG sin necesidad de
+reiniciar el servidor ni modificar las variables de entorno. Los cambios se persisten en el
+archivo \texttt{pipeline\_config.json} y sobreviven a reinicios del servidor, de modo que la
+configuración ajustada se convierte en el nuevo estado base del sistema.
+
+La existencia de este panel responde a la naturaleza exploratoria del ajuste de sistemas RAG.
+Los valores óptimos de temperatura, número de fragmentos de contexto, pesos de fusión o
+umbrales del detector de insuficiencia dependen del corpus específico y del perfil real de
+consultas, y no son conocidos a priori. Poder modificarlos y observar el efecto sobre las
+respuestas sin interrumpir el servicio reduce significativamente el ciclo de experimentación.
+
+\paragraph{Datos presentados.}
+El endpoint \texttt{GET /api/v1/config} devuelve la configuración activa completa. Al cargar
+el panel se muestran todos los parámetros vigentes agrupados por categoría: pesos de fusión
+híbrida, configuración del modelo LLM, estado y parámetros del reordenador, estado de HyDE,
+y los quince parámetros del detector de insuficiencia.
+
+\paragraph{Fusión híbrida.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{bm25\_weight}   & 0.3 & Peso del recuperador léxico BM25 en la fusión RRF. \\
+\texttt{vector\_weight} & 0.7 & Peso del recuperador vectorial en la fusión RRF. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Los dos pesos deben sumar 1{,}0. Un peso BM25 más alto favorece coincidencias exactas de
+términos técnicos; un peso vectorial más alto favorece similitud semántica entre idiomas
+distintos. El sistema valida la restricción de suma antes de aplicar los cambios.
+
+\paragraph{Modelo de lenguaje.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{llm\_base\_url}  & \texttt{https://api.mistral.ai/v1} & URL del proveedor LLM. \\
+\texttt{llm\_api\_key}   & ---                               & Clave API del proveedor. \\
+\texttt{model}           & \texttt{mistral-small-latest}     & Modelo de generación. \\
+\texttt{temperature}     & 0.1  & Temperatura de muestreo (0.0--2.0). \\
+\texttt{max\_tokens}     & 1024 & Tokens máximos en la respuesta generada. \\
+\texttt{context\_chunks} & 15   & Fragmentos incluidos en el prompt. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Reordenador.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{reranker\_enabled}      & true & Activa el cross-encoder de segunda etapa. \\
+\texttt{reranker\_candidate\_k} & 30   & Candidatos pasados al reordenador. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Expansión hipotética (HyDE).}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{hyde\_enabled} & false & Activa la expansión hipotética de la consulta antes de
+                                 la búsqueda vectorial, a costa de una llamada LLM adicional. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Detector de insuficiencia.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Default} & \textbf{Descripción} \\
+\midrule
+\texttt{min\_results}                 & 5    & Mínimo de fragmentos para no activar búsqueda web. \\
+\texttt{expected\_results}            & 10   & Resultados esperados (normaliza puntuación de cantidad). \\
+\texttt{min\_top\_score}              & 0.35 & Puntuación mínima del fragmento más relevante. \\
+\texttt{relevant\_overlap\_threshold} & 0.60 & Fracción mínima de términos de la consulta que debe
+                                               contener un fragmento para ser considerado relevante. \\
+\texttt{min\_relevant\_results}       & 2    & Mínimo de fragmentos relevantes requeridos. \\
+\texttt{min\_coverage\_score}         & 0.20 & Cobertura léxica mínima de la consulta. \\
+\texttt{min\_answerability\_score}    & 0.40 & Puntuación mínima de respondibilidad. \\
+\texttt{min\_source\_diversity}       & 0.30 & Diversidad mínima de URLs únicas entre resultados. \\
+\texttt{confidence\_threshold}        & 0.65 & Umbral de confianza local; por debajo activa la
+                                               búsqueda web. \\
+\texttt{coverage\_top\_n}             & 5    & Fragmentos del top usados para calcular cobertura. \\
+\texttt{w\_top}                       & 0.10 & Peso de la puntuación máxima normalizada. \\
+\texttt{w\_quantity}                  & 0.15 & Peso de la puntuación de cantidad. \\
+\texttt{w\_coverage}                  & 0.35 & Peso de la cobertura léxica. \\
+\texttt{w\_diversity}                 & 0.15 & Peso de la diversidad de fuentes. \\
+\texttt{w\_answerability}             & 0.25 & Peso de la respondibilidad. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Los cinco pesos (\texttt{w\_top}, \texttt{w\_quantity}, \texttt{w\_coverage},
+\texttt{w\_diversity}, \texttt{w\_answerability}) deben sumar exactamente 1{,}0. La API
+valida esta restricción antes de aplicar cualquier cambio y rechaza la configuración si no
+se cumple.
+
+\section{Panel de ingesta y fuentes}
+
+\paragraph{Función del panel.}
+Permite gestionar las fuentes de documentación del corpus: listar las fuentes configuradas,
+ejecutar ingestas sobre URLs registradas y subir archivos directamente al sistema. Es la
+sección desde la que el operador expande o actualiza el conocimiento disponible para el pipeline
+RAG sin necesidad de acceder al servidor.
+
+\paragraph{Datos presentados.}
+El endpoint \texttt{GET /api/v1/sources} devuelve la lista de fuentes configuradas con su
+identificador, URL raíz, estado y número de documentos indexados. El endpoint
+\texttt{POST /api/v1/ingest} ejecuta la ingesta y devuelve el número de fragmentos procesados
+y su distribución por fuente. El endpoint \texttt{POST /api/v1/upload} acepta archivos en
+formato PDF, HTML, Markdown y texto plano; tras la carga informa el número de fragmentos
+generados, los identificadores asignados y el estado de la operación.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Descripción} \\
+\midrule
+\texttt{source\_id} & Identificador de la fuente a ingestar. \\
+\texttt{force}      & Booleano que fuerza la re-ingesta aunque los documentos ya existan
+                      en el índice. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Panel de métricas}
+
+\paragraph{Función del panel.}
+Muestra estadísticas operativas del sistema en tiempo real. Su utilidad es permitir al
+operador monitorizar el estado del índice y el comportamiento del sistema sin acceder a los
+logs del servidor. Es un panel de solo lectura; no expone parámetros editables.
+
+\paragraph{Datos presentados.}
+El endpoint \texttt{GET /api/v1/metrics} expone el número total de fragmentos en el índice
+BM25 y en el índice vectorial, el número de documentos fuente indexados, el número de
+fragmentos en el caché web, el tiempo de respuesta promedio de las últimas consultas y el
+conteo de consultas que activaron búsqueda web externa.
+
+\section{Panel de retroalimentación de consultas}
+
+\paragraph{Función del panel.}
+Implementa el módulo de \emph{query feedback}. Permite ejecutar búsquedas con expansión
+pseudo-relevante de la consulta, registrar retroalimentación explícita sobre la relevancia
+de los fragmentos recuperados, y realizar búsquedas que incorporan ese historial de
+retroalimentación para reordenar los resultados. Es el panel desde el que el operador puede
+mejorar la calidad de la recuperación de forma iterativa, sin modificar el índice ni el
+pipeline.
+
+\paragraph{Expansión de consulta.}
+El endpoint \texttt{POST /api/v1/query-feedback/expand} aplica retroalimentación de
+pseudo-relevancia: recupera los fragmentos más relevantes para la consulta, extrae los
+términos más informativos y los añade a la consulta original. Devuelve la consulta expandida,
+la lista de términos añadidos, el método de expansión utilizado y el número de fragmentos
+empleados para la expansión.
+
+\paragraph{Búsqueda con expansión y con retroalimentación.}
+El endpoint \texttt{POST /api/v1/query-feedback/search} devuelve los campos de expansión más
+una lista de resultados enriquecidos con el identificador, puntuación, URL, título, breadcrumb
+y texto de cada fragmento. El endpoint \texttt{POST /api/v1/query-feedback/search-with-feedback}
+incorpora adicionalmente el historial de retroalimentación explícita para ajustar las
+puntuaciones. Cada resultado incluye la puntuación ajustada (\texttt{adjusted\_score}), el
+boost aplicado (\texttt{feedback\_boost}), si se aplicó retroalimentación
+(\texttt{feedback\_applied}), el valor de relevancia registrado (0--3), el tipo de coincidencia
+con el historial (\texttt{exact} o \texttt{semantic}) y la similitud semántica con la consulta
+original del registro.
+
+\paragraph{Registro de retroalimentación.}
+El endpoint \texttt{POST /api/v1/query-feedback/feedback} permite al usuario registrar su
+valoración explícita sobre un fragmento recuperado. La interfaz muestra un selector de
+relevancia junto a cada resultado de búsqueda. Las valoraciones posibles son: 0 (irrelevante),
+1 (marginalmente relevante), 2 (relevante) y 3 (muy relevante). El campo \texttt{notes}
+acepta un comentario libre opcional.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parámetro} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+\texttt{query}                        & texto    & Consulta a ejecutar. \\
+\texttt{top\_k}                       & entero   & Número de resultados (1--50). \\
+\texttt{top\_k\_feedback}             & entero   & Fragmentos para la expansión (1--50). \\
+\texttt{max\_expansion\_terms}        & entero   & Términos máximos de expansión (0--20). \\
+\texttt{expansion\_enabled}           & booleano & Activa la expansión pseudo-relevante. \\
+\texttt{feedback\_enabled}            & booleano & Activa el reordenamiento por retroalimentación. \\
+\texttt{semantic\_feedback\_enabled}  & booleano & Activa la búsqueda semántica en el historial. \\
+\texttt{semantic\_similarity\_threshold} & float & Umbral de similitud para coincidencias semánticas (0.0--1.0). \\
+\texttt{chunk\_id}                    & texto    & Fragmento sobre el que se registra la valoración. \\
+\texttt{relevance}                    & entero   & Valoración: 0 irrelevante, 1 marginal, 2 relevante,
+                                                   3 muy relevante. \\
+\texttt{notes}                        & texto    & Comentario libre opcional sobre la valoración. \\
+\texttt{session\_id}                  & texto    & Identificador de sesión opcional. \\
+\texttt{source\_ids}                  & lista    & Filtro opcional por fuentes específicas. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Resumen de retroalimentación.}
+El endpoint \texttt{GET /api/v1/query-feedback/feedback/summary} devuelve estadísticas
+agregadas del historial: número total de valoraciones registradas, número de consultas únicas
+con al menos una valoración, conteos de valoraciones positivas ($\geq 2$), negativas (= 0) y
+marginales (= 1), y la media aritmética de todas las valoraciones.
+
+\section{Panel de evaluación}
+
+\paragraph{Función del panel.}
+Permite gestionar el conjunto de evaluación del sistema: definir consultas de prueba con sus
+juicios de relevancia (\emph{qrels}), ejecutar experimentos de recuperación y calcular métricas
+de calidad estándar de recuperación de información. Es la sección desde la que el operador
+puede medir el efecto de los cambios de configuración sobre la calidad objetiva del sistema.
+
+\paragraph{Gestión de consultas y juicios.}
+El endpoint \texttt{GET /api/v1/evaluation/queries} devuelve la lista de consultas de
+evaluación registradas. El endpoint \texttt{POST /api/v1/evaluation/queries} permite añadir
+nuevas consultas con su identificador, texto, descripción y juicios de relevancia asociados.
+El endpoint \texttt{POST /api/v1/evaluation/queries/\{query\_id\}/rankings} ejecuta el
+pipeline de recuperación para una consulta de evaluación y almacena el ranking resultante.
+El endpoint \texttt{PUT /api/v1/evaluation/queries/\{query\_id\}/judgments/\{chunk\_id\}}
+permite registrar o actualizar manualmente el juicio de relevancia de un fragmento específico.
+
+\paragraph{Métricas calculadas.}
+El endpoint \texttt{GET /api/v1/evaluation/summary} calcula y devuelve las métricas agregadas
+del conjunto de evaluación completo: Precision@k, Recall@k, F1@k, MRR (\emph{Mean Reciprocal
+Rank}), DCG@k y NDCG@k. El endpoint \texttt{GET /api/v1/evaluation/report} devuelve el reporte
+detallado en formato JSON con métricas por consulta individual y promedios globales.
+
+\paragraph{Parámetros editables.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Parámetro} & \textbf{Descripción} \\
+\midrule
+\texttt{query\_id} & Identificador de la consulta de evaluación a gestionar. \\
+\texttt{chunk\_id} & Fragmento sobre el que se registra el juicio de relevancia. \\
+\texttt{relevance} & Juicio de relevancia binario o graduado asignado al fragmento. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Resumen de endpoints por panel}
+
+\begin{center}
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{Panel} & \textbf{Método} & \textbf{Endpoint} \\
+\midrule
+Chat RAG                  & POST & \texttt{/api/v1/rag/query} \\
+Historial                 & GET  & \texttt{/api/v1/rag/history/\{session\_id\}} \\
+Búsqueda híbrida          & POST & \texttt{/api/v1/search} \\
+Búsqueda caché web        & POST & \texttt{/api/v1/search/web-cache} \\
+Configuración (leer)      & GET  & \texttt{/api/v1/config} \\
+Configuración (guardar)   & POST & \texttt{/api/v1/config} \\
+Fuentes                   & GET  & \texttt{/api/v1/sources} \\
+Ingesta                   & POST & \texttt{/api/v1/ingest} \\
+Subida de archivo         & POST & \texttt{/api/v1/upload} \\
+Métricas                  & GET  & \texttt{/api/v1/metrics} \\
+Expansión de consulta     & POST & \texttt{/api/v1/query-feedback/expand} \\
+Búsqueda con expansión    & POST & \texttt{/api/v1/query-feedback/search} \\
+Búsqueda con feedback     & POST & \texttt{/api/v1/query-feedback/search-with-feedback} \\
+Registrar valoración      & POST & \texttt{/api/v1/query-feedback/feedback} \\
+Resumen de valoraciones   & GET  & \texttt{/api/v1/query-feedback/feedback/summary} \\
+Valoraciones por consulta & GET  & \texttt{/api/v1/query-feedback/feedback} \\
+Consultas de evaluación   & GET  & \texttt{/api/v1/evaluation/queries} \\
+Nueva consulta            & POST & \texttt{/api/v1/evaluation/queries} \\
+Ejecutar ranking          & POST & \texttt{/api/v1/evaluation/queries/\{id\}/rankings} \\
+Juicio de relevancia      & PUT  & \texttt{/api/v1/evaluation/queries/\{id\}/judgments/\{cid\}} \\
+Resumen de evaluación     & GET  & \texttt{/api/v1/evaluation/summary} \\
+Reporte de evaluación     & GET  & \texttt{/api/v1/evaluation/report} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Justificación técnica de la solución}
+
+La decisión de construir la interfaz como cliente puro de la API, sin lógica de negocio
+propia, responde a un principio de mantenibilidad: el sistema tiene varios módulos con
+parámetros ajustables en tiempo de ejecución, y cualquier duplicación de esa lógica en la
+capa de presentación introduciría una fuente de inconsistencias. Al delegar toda la
+computación al backend, la interfaz puede evolucionar independientemente del pipeline y
+viceversa.
+
+La organización en ocho paneles diferenciados refleja la separación de responsabilidades del
+sistema. El panel de chat cubre el caso de uso primario; los paneles de búsqueda directa y
+configuración cubren el uso operativo y de diagnóstico; los paneles de ingesta y métricas
+cubren la administración del corpus; los paneles de retroalimentación y evaluación cubren el
+ciclo de mejora continua de la calidad. Esta separación permite que distintos roles de usuario
+(usuario final, operador, ingeniero de datos) interactúen únicamente con la sección que les
+corresponde sin estar expuestos a la complejidad del resto.
+
+La configuración en tiempo de ejecución expuesta en el panel de configuración es técnicamente
+necesaria porque los parámetros del sistema RAG no tienen valores óptimos universales. El
+umbral de confianza del detector de insuficiencia, los pesos de fusión híbrida o la temperatura
+del modelo dependen del perfil real de consultas y del contenido del corpus. Sin la capacidad
+de ajustarlos en caliente, cada experimento requeriría un reinicio del servidor y una
+modificación de las variables de entorno, lo que hace imposible el ajuste interactivo en un
+entorno de producción.
+
+El panel de evaluación existe porque la calidad del sistema RAG no puede medirse únicamente
+de forma cualitativa. Las métricas estándar de recuperación de información (NDCG, MRR,
+Precision@k) proporcionan una señal objetiva y repetible que permite comparar configuraciones
+distintas, detectar regresiones al cambiar modelos y justificar decisiones técnicas con
+evidencia medible en lugar de impresiones subjetivas.
+
+\section{Limitaciones del módulo}
+
+La interfaz no tiene mecanismos de autenticación ni control de acceso. Cualquier usuario con
+acceso al puerto del servidor puede modificar la configuración del pipeline, disparar
+ingestas o registrar valoraciones. Esto es aceptable en un entorno de desarrollo interno pero
+no en un despliegue con acceso no restringido.
+
+El panel de historial solo puede recuperar sesiones por su identificador exacto. No existe
+funcionalidad de búsqueda o listado de sesiones activas: el usuario debe conocer el
+\texttt{session\_id} que usó en las consultas previas para poder acceder al historial. Sesiones
+cuyo identificador se pierda son irrecuperables desde la interfaz, aunque los datos persistan
+en Redis hasta que expire el TTL.
+
+El panel de métricas expone estadísticas de nivel de sistema pero no métricas de calidad de
+recuperación en tiempo real. Para conocer si el sistema está respondiendo bien a las consultas
+recientes, el operador debe usar el panel de evaluación, que requiere construir un conjunto de
+prueba y ejecutar los rankings manualmente.
+
+Los cambios de configuración del detector de insuficiencia surten efecto inmediatamente sobre
+las consultas siguientes pero no hay forma de comparar desde la interfaz el efecto de dos
+configuraciones distintas sobre el mismo conjunto de consultas sin registrar manualmente los
+resultados. La experimentación controlada requiere construir un conjunto de evaluación en el
+panel de evaluación antes de realizar cambios.
+
+\end{document}
