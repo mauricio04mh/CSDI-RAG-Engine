@@ -1,0 +1,37 @@
+\relax 
+\@writefile{toc}{\contentsline {section}{\numberline {1}Módulo de base de datos vectorial}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Componentes del módulo.}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Modelo de embeddings}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Modelo seleccionado: BAAI/bge-m3.}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Carga diferida y singleton.}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Normalización L2 y similitud coseno.}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Codificación asimétrica con prefijo.}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Índice FAISS HNSW}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Estructura del índice.}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Parámetros de construcción.}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Adición de vectores y restricciones del índice.}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Persistencia del índice en disco.}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}VectorStore: mapeo en memoria}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Flujo de indexación}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Encolamiento y procesamiento por lotes.}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Secuencia de operaciones en un flush.}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Inicialización al arrancar}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Ruta 1: carga desde disco.}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Ruta 2: reconstrucción desde base de datos.}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Ruta 3: índice vacío.}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Validación de metadatos del modelo.}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Flujo de búsqueda}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Persistencia en base de datos}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Esquema de tablas del corpus principal.}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Uso de pgvector.}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Eliminación de documentos}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Estrategia de soft delete.}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reclamación de espacio.}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Índice vectorial del caché web}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11}Configuración y parámetros clave}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12}Justificación técnica de la solución}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Por qué HNSW sobre un índice plano.}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Por qué la base de datos como fuente de verdad.}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Por qué soft delete y no eliminación directa.}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13}Limitaciones del módulo}{7}{}\protected@file@percent }
+\gdef \@abspage@last{7}
