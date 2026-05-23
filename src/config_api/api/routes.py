@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["config"])
 
 _DEFAULT_CONFIG_PATH = "pipeline_config.json"
+_DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY = 0.25
 
 
 def _config_path() -> str:
@@ -81,6 +82,18 @@ def _available_models(provider: str) -> list[str]:
     return []
 
 
+def _query_feedback_comparison_probability(config: dict | None = None) -> float:
+    persisted_config = config if config is not None else load_config_from_disk()
+    if "query_feedback_comparison_probability" in persisted_config:
+        return float(persisted_config["query_feedback_comparison_probability"])
+    return float(
+        os.getenv(
+            "QUERY_FEEDBACK_COMPARISON_PROBABILITY",
+            str(_DEFAULT_QUERY_FEEDBACK_COMPARISON_PROBABILITY),
+        )
+    )
+
+
 class InsuffConfig(BaseModel):
     confidence_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     min_results: int = Field(default=5, ge=1)
@@ -117,6 +130,7 @@ class PipelineConfig(BaseModel):
     hyde_enabled: bool = False
     llm_base_url: str = Field(..., min_length=1)
     llm_api_key: str = Field(default="")
+    query_feedback_comparison_probability: float = Field(default=0.25, ge=0.0, le=1.0)
     provider: str = Field(default="custom")
     available_models: list[str] = Field(default_factory=list)
     insuff: InsuffConfig = Field(default_factory=InsuffConfig)
@@ -140,6 +154,7 @@ class PipelineConfigUpdate(BaseModel):
     hyde_enabled: bool = False
     llm_base_url: str = Field(..., min_length=1)
     llm_api_key: str = Field(default="")
+    query_feedback_comparison_probability: float = Field(default=0.25, ge=0.0, le=1.0)
     insuff: InsuffConfig = Field(default_factory=InsuffConfig)
 
     @model_validator(mode="after")
@@ -159,6 +174,7 @@ def get_config(request: Request) -> PipelineConfig:
     api_key = llm_client._headers.get("Authorization", "").replace("Bearer ", "")
     provider = _provider_name(base_url)
     s = rag_pipeline._settings
+    persisted_config = load_config_from_disk()
 
     insuff_cfg = InsuffConfig()
     detector: InsufficiencyDetector | None = rag_pipeline._insufficiency_detector
@@ -193,6 +209,7 @@ def get_config(request: Request) -> PipelineConfig:
         hyde_enabled=s.hyde_enabled,
         llm_base_url=base_url,
         llm_api_key=api_key,
+        query_feedback_comparison_probability=_query_feedback_comparison_probability(persisted_config),
         provider=provider,
         available_models=_available_models(provider),
         insuff=insuff_cfg,
@@ -276,6 +293,7 @@ def update_config(payload: PipelineConfigUpdate, request: Request) -> PipelineCo
         hyde_enabled=s.hyde_enabled,
         llm_base_url=payload.llm_base_url,
         llm_api_key=payload.llm_api_key,
+        query_feedback_comparison_probability=payload.query_feedback_comparison_probability,
         provider=provider,
         available_models=_available_models(provider),
         insuff=payload.insuff,
