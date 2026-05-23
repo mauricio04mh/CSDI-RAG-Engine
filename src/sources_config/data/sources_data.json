@@ -728,11 +728,26 @@
     "technology": ["csharp", "dotnet", "language"],
     "max_pages": 250,
     "scraper": {
-      "main_content_selectors": ["main", "article", "#main", ".content", "[role=\"main\"]"],
-      "title_selectors": ["main h1", "article h1", "#main h1", "h1", "title"],
+      "main_content_selectors": ["article", "#ms-content-container", ".content-column", "main", "[role=\"main\"]"],
+      "title_selectors": ["article h1", "main h1", "h1", "title"],
       "breadcrumb_selectors": ["nav[aria-label=\"Breadcrumb\"] a", "nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
       "code_block_selectors": ["pre", "code"],
-      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+      "exclude_selectors": [
+        "script", "style", "noscript", "header", "footer", "nav", "aside",
+        ".toc", ".sidebar",
+        "[data-bi-name=\"page-actions\"]",
+        "[data-bi-name=\"action-list\"]",
+        "[data-bi-name=\"toc\"]",
+        "[data-bi-name=\"feedback-section\"]",
+        "#feedback-section",
+        "#comments",
+        ".action-list",
+        ".action-content",
+        ".permissions-box",
+        ".alert",
+        ".is-hidden-tablet",
+        ".contributors"
+      ]
     }
   },
   {
