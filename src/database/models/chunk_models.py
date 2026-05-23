@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Integer, Text, func
+from sqlalchemy import Integer, TIMESTAMP, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -18,4 +18,6 @@ class Chunk(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     breadcrumb: Mapped[str] = mapped_column(Text, nullable=False, default="")
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    published_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    document_updated_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)

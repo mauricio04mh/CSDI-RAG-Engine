@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Integer, Text, func
+from sqlalchemy import Boolean, Integer, TIMESTAMP, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -27,6 +27,8 @@ class SourceDocument(Base):
     fetch_method: Mapped[str] = mapped_column(Text, nullable=False, default="http")
     crawl_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
     discovered_from_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    document_updated_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     fetched_at: Mapped[str] = mapped_column(nullable=False, server_default=func.now())
