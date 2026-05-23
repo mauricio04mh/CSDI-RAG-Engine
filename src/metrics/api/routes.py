@@ -18,6 +18,7 @@ class MetricsResponse(BaseModel):
     faiss_vectors: int
     bm25_documents: int
     bm25_terms: int
+    total_documents: int
 
 
 @router.get("/metrics", response_model=MetricsResponse)
@@ -32,4 +33,5 @@ def get_metrics(request: Request) -> MetricsResponse:
         faiss_vectors=len(vector_index_builder.vector_store),
         bm25_documents=bm25_retriever._index.total_documents,
         bm25_terms=len(bm25_retriever._index.dictionary),
+        total_documents=chunk_repo.count_distinct_urls(),
     )

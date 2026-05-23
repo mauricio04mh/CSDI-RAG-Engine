@@ -98,6 +98,14 @@ async def upload_file(
     if finalize_result.vector_flushed:
         logger.debug("upload_vector_buffer_flushed count=%s", finalize_result.vector_flushed)
 
+    user_source_repo = request.app.state.user_source_repo
+    user_source_repo.register(
+        source_id=source_id,
+        name=Path(filename).stem,
+        base_url=f"upload://{filename}",
+        source_kind="upload_file",
+    )
+
     logger.info(
         "upload_complete source_id=%s filename=%s produced=%s indexed=%s",
         source_id,

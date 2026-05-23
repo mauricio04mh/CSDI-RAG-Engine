@@ -76,6 +76,33 @@ class ChunkRepository:
                 select(func.count()).select_from(self.chunk_model)
             ).scalar_one()
 
+    def count_distinct_urls(self) -> int:
+        """Return the number of distinct source URLs (pages/documents) indexed."""
+        with Session(self.engine) as session:
+            return session.execute(
+                select(func.count(func.distinct(self.chunk_model.url)))
+            ).scalar_one()
+
+    def max_created_at_by_source_ids(self, source_ids: list[str]) -> dict[str, str]:
+        """Return MAX(created_at) ISO string per source_id for the given IDs."""
+        if not source_ids:
+            return {}
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(
+                    self.chunk_model.source_id,
+                    func.max(self.chunk_model.created_at).label("max_created_at"),
+                )
+                .where(self.chunk_model.source_id.in_(source_ids))
+                .group_by(self.chunk_model.source_id)
+            ).all()
+        result = {}
+        for row in rows:
+            if row.max_created_at is not None:
+                ts = row.max_created_at
+                result[row.source_id] = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+        return result
+
     def count_by_source_ids(self, source_ids: list[str]) -> dict[str, int]:
         """Return chunk counts grouped by source_id for the given IDs."""
         if not source_ids:

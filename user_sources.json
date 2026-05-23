@@ -1,0 +1,23 @@
+[
+  {
+    "source_id": "url:www.wikipedia.org:72e64cabc2",
+    "name": "URL Source www.wikipedia.org",
+    "base_url": "https://www.wikipedia.org/",
+    "source_kind": "url_manual",
+    "added_at": "2026-05-23T04:06:00.590884+00:00"
+  },
+  {
+    "source_id": "EDA II - 2025 - extraordinario",
+    "name": "EDA II - 2025 - extraordinario",
+    "base_url": "upload://EDA II - 2025 - extraordinario.pdf",
+    "source_kind": "upload_file",
+    "added_at": "2026-05-23T04:16:49.692986+00:00"
+  },
+  {
+    "source_id": "MNT",
+    "name": "MNT",
+    "base_url": "upload://MNT.docx",
+    "source_kind": "upload_file",
+    "added_at": "2026-05-23T04:22:20.492228+00:00"
+  }
+]
