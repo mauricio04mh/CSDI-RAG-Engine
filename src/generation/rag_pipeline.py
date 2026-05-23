@@ -202,8 +202,11 @@ class RAGPipeline:
         ]
         sources.sort(key=lambda source: source.rank or 9999)
 
-        # 3. Build prompt and call LLM
-        messages = build_messages(question, final_chunks)
+        # 3. Build prompt and call LLM — pass corpus and web chunks separately so
+        #    the prompt can instruct the model to distinguish sources in the answer.
+        corpus_chunks = [c for c in final_chunks if _source_type_for_chunk(c) == "corpus"]
+        web_chunks = [c for c in final_chunks if _source_type_for_chunk(c) == "web_cache"]
+        messages = build_messages(question, corpus_chunks, web_chunks)
         response = self._llm_client.chat(messages)
 
         logger.info(
