@@ -13,6 +13,7 @@ from src.ingestion.pipeline_services import (
     ScrapeStageService,
     SourceDocumentPersistenceService,
 )
+from src.ingestion.progress_tracker import IngestionTracker
 from src.scraper.scraper import Scraper
 from src.sources_config.schemas import SourceConfig
 from src.sources_config.source_config_repository import SourceConfigRepository
@@ -44,8 +45,10 @@ class IngestionOrchestrator:
         chunk_size: int = 256,
         chunk_overlap: int = 32,
         crawler_timeout: float = 15.0,
+        tracker: IngestionTracker | None = None,
     ) -> None:
         self._source_repo = source_repo
+        self._tracker = tracker
         crawler = Crawler(timeout=crawler_timeout)
         scraper = Scraper()
         chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -64,16 +67,28 @@ class IngestionOrchestrator:
     def ingest_source(self, source: SourceConfig) -> IngestionReport:
         """Run the full pipeline for an explicit SourceConfig and return a summary report."""
         source_id = source.source_id
+        tracker = self._tracker
         logger.info("ingestion_started source=%s", source_id)
 
-        crawl_result = self._crawl_service.crawl(source)
-        logger.info("crawl_done source=%s pages=%s", source_id, crawl_result.total)
+        if tracker:
+            tracker.start(source_id)
 
+        pages_crawled = 0
         pages_scraped = 0
         chunks_produced = 0
         chunks_indexed = 0
+        # Transition to indexing phase on first page using max_pages as estimate.
+        # This lets the UI show a percentage almost immediately instead of waiting for
+        # the full crawl to finish before any progress is visible.
+        indexing_started = False
 
-        for page in crawl_result.pages:
+        for page in self._crawl_service.crawl_iter(source):
+            pages_crawled += 1
+
+            if not indexing_started and tracker:
+                tracker.set_pages_total(source_id, source.max_pages)
+                indexing_started = True
+
             doc = self._scrape_service.scrape_page(page=page, source=source)
             if doc is None:
                 continue
@@ -91,6 +106,10 @@ class IngestionOrchestrator:
             chunks_produced += len(chunks)
             ingestion_result = self._chunk_indexing_service.ingest(chunks)
             chunks_indexed += ingestion_result.indexed_chunks
+
+            if tracker:
+                tracker.page_done(source_id, ingestion_result.indexed_chunks)
+
             if ingestion_result.new_chunks == 0:
                 logger.debug("page_all_chunks_exist url=%s skipping=%s", doc.url, len(chunks))
             elif ingestion_result.skipped_existing > 0:
@@ -107,7 +126,7 @@ class IngestionOrchestrator:
 
         report = IngestionReport(
             source_id=source_id,
-            pages_crawled=crawl_result.total,
+            pages_crawled=pages_crawled,
             pages_scraped=pages_scraped,
             chunks_produced=chunks_produced,
             chunks_indexed=chunks_indexed,
