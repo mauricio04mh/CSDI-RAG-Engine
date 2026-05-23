@@ -90,8 +90,8 @@ def compute_display_priority(
 ) -> float:
     source_score = {
         "corpus": 1.0,
-        "web_cache": 0.8,
-    }.get(source_type, 0.7)
+        "web_cache": 0.2,
+    }.get(source_type, 0.4)
     method_score = {
         "hybrid": 1.0,
         "vector": 0.85,
@@ -99,9 +99,9 @@ def compute_display_priority(
         "web_cache": 0.75,
     }.get(retrieval_method, 0.6)
     return round(
-        relevance_score * 0.70
-        + freshness_score * 0.10
-        + source_score * 0.10
+        relevance_score * 0.65
+        + freshness_score * 0.05
+        + source_score * 0.20
         + method_score * 0.10,
         6,
     )
