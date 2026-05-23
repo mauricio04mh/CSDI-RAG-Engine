@@ -77,17 +77,19 @@ class IngestionOrchestrator:
         pages_scraped = 0
         chunks_produced = 0
         chunks_indexed = 0
-        # Transition to indexing phase on first page using max_pages as estimate.
-        # This lets the UI show a percentage almost immediately instead of waiting for
-        # the full crawl to finish before any progress is visible.
         indexing_started = False
 
-        for page in self._crawl_service.crawl_iter(source):
+        for page, pages_estimate in self._crawl_service.crawl_iter(source):
             pages_crawled += 1
 
-            if not indexing_started and tracker:
-                tracker.set_pages_total(source_id, source.max_pages)
-                indexing_started = True
+            if tracker:
+                if not indexing_started:
+                    tracker.set_pages_total(source_id, pages_estimate)
+                    indexing_started = True
+                # Advance progress immediately on crawl so the UI updates at ~1 req/sec
+                # rather than waiting for the slow embed+index pipeline (large pages can
+                # take minutes to index, making progress appear frozen at 1%).
+                tracker.page_crawled(source_id, pages_estimate)
 
             doc = self._scrape_service.scrape_page(page=page, source=source)
             if doc is None:
@@ -108,7 +110,7 @@ class IngestionOrchestrator:
             chunks_indexed += ingestion_result.indexed_chunks
 
             if tracker:
-                tracker.page_done(source_id, ingestion_result.indexed_chunks)
+                tracker.add_indexed_chunks(source_id, ingestion_result.indexed_chunks)
 
             if ingestion_result.new_chunks == 0:
                 logger.debug("page_all_chunks_exist url=%s skipping=%s", doc.url, len(chunks))

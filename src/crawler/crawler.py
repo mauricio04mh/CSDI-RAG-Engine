@@ -63,7 +63,7 @@ class Crawler:
 
     def crawl(self, source: SourceConfig) -> CrawlResult:
         result = CrawlResult(source_id=source.source_id)
-        for page in self.crawl_iter(source):
+        for page, _estimate in self.crawl_iter(source):
             result.pages.append(page)
         return result
 
@@ -115,7 +115,9 @@ class Crawler:
                         if link not in visited:
                             queue.append((link, depth + 1, url))
 
-                yield page
+                # Estimate total based on pages fetched + queue remaining, capped at max_pages
+                pages_estimate = min(total + len(queue), source.max_pages)
+                yield page, pages_estimate
 
         logger.info("crawl_finished source=%s pages=%s", source.source_id, total)
 
