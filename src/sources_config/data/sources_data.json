@@ -144,5 +144,899 @@
         "aside"
       ]
     }
+  },
+  {
+    "source_id": "postgres_docs",
+    "name": "PostgreSQL Docs",
+    "base_url": "https://www.postgresql.org",
+    "allowed_domains": ["www.postgresql.org"],
+    "seed_urls": [
+      "https://www.postgresql.org/docs/current/"
+    ],
+    "allowed_path_prefixes": [
+      "/docs/current/"
+    ],
+    "blocked_path_patterns": [
+      "/search/",
+      "/ftp/",
+      "/list/"
+    ],
+    "max_depth": 2,
+    "technology": ["postgresql", "database", "sql"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 250,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "#docContent",
+        ".docContent",
+        "article",
+        "[role=\"main\"]"
+      ],
+      "title_selectors": [
+        "main h1",
+        "#docContent h1",
+        "article h1",
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        "nav[aria-label=\"breadcrumb\"] a",
+        ".breadcrumb a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".toc",
+        ".sidebar"
+      ]
+    }
+  },
+  {
+    "source_id": "sqlalchemy_docs",
+    "name": "SQLAlchemy Docs",
+    "base_url": "https://docs.sqlalchemy.org",
+    "allowed_domains": ["docs.sqlalchemy.org"],
+    "seed_urls": [
+      "https://docs.sqlalchemy.org/en/20/"
+    ],
+    "allowed_path_prefixes": [
+      "/en/20/"
+    ],
+    "blocked_path_patterns": [
+      "/search.html",
+      "/genindex",
+      "/py-modindex"
+    ],
+    "max_depth": 2,
+    "technology": ["python", "sqlalchemy", "database", "orm"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 250,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main[role=\"main\"]",
+        "div[role=\"main\"]",
+        ".body",
+        ".document",
+        "article"
+      ],
+      "title_selectors": [
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        ".breadcrumbs a",
+        ".wy-breadcrumbs a",
+        ".related a"
+      ],
+      "code_block_selectors": [
+        "div.highlight pre",
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".sphinxsidebar",
+        ".related",
+        ".toc"
+      ]
+    }
+  },
+  {
+    "source_id": "docker_docs",
+    "name": "Docker Docs",
+    "base_url": "https://docs.docker.com",
+    "allowed_domains": ["docs.docker.com"],
+    "seed_urls": [
+      "https://docs.docker.com/"
+    ],
+    "allowed_path_prefixes": [
+      "/",
+      "/engine/",
+      "/compose/",
+      "/build/",
+      "/get-started/",
+      "/reference/"
+    ],
+    "blocked_path_patterns": [
+      "/search",
+      "/samples/",
+      "/desktop/release-notes/"
+    ],
+    "max_depth": 2,
+    "technology": ["docker", "containers", "devops"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 300,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "article",
+        "[role=\"main\"]",
+        ".prose"
+      ],
+      "title_selectors": [
+        "main h1",
+        "article h1",
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        "nav[aria-label=\"breadcrumb\"] a",
+        ".breadcrumbs a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".toc",
+        ".sidebar"
+      ]
+    }
+  },
+  {
+    "source_id": "kubernetes_docs",
+    "name": "Kubernetes Docs",
+    "base_url": "https://kubernetes.io",
+    "allowed_domains": ["kubernetes.io"],
+    "seed_urls": [
+      "https://kubernetes.io/docs/home/"
+    ],
+    "allowed_path_prefixes": [
+      "/docs/"
+    ],
+    "blocked_path_patterns": [
+      "/search",
+      "/blog/",
+      "/case-studies/",
+      "/releases/"
+    ],
+    "max_depth": 2,
+    "technology": ["kubernetes", "containers", "devops"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 300,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "article",
+        "[role=\"main\"]",
+        ".td-content"
+      ],
+      "title_selectors": [
+        "main h1",
+        "article h1",
+        ".td-content h1",
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        "nav[aria-label=\"breadcrumb\"] a",
+        ".breadcrumb a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".td-sidebar",
+        ".td-toc",
+        ".toc"
+      ]
+    }
+  },
+  {
+    "source_id": "git_docs",
+    "name": "Git Docs",
+    "base_url": "https://git-scm.com",
+    "allowed_domains": ["git-scm.com"],
+    "seed_urls": [
+      "https://git-scm.com/docs"
+    ],
+    "allowed_path_prefixes": [
+      "/docs"
+    ],
+    "blocked_path_patterns": [
+      "/search",
+      "/book/",
+      "/downloads"
+    ],
+    "max_depth": 2,
+    "technology": ["git", "version-control", "tools"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 250,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "article",
+        "#content",
+        ".documentation"
+      ],
+      "title_selectors": [
+        "main h1",
+        "article h1",
+        "#content h1",
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        ".breadcrumbs a",
+        "nav[aria-label=\"breadcrumb\"] a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".sidebar",
+        ".toc"
+      ]
+    }
+  },
+  {
+    "source_id": "github_docs",
+    "name": "GitHub Docs",
+    "base_url": "https://docs.github.com",
+    "allowed_domains": ["docs.github.com"],
+    "seed_urls": [
+      "https://docs.github.com/en"
+    ],
+    "allowed_path_prefixes": [
+      "/en"
+    ],
+    "blocked_path_patterns": [
+      "/search",
+      "/site-policy/",
+      "/get-started/learning-about-github/github-glossary"
+    ],
+    "max_depth": 2,
+    "technology": ["github", "git", "ci-cd", "devops"],
+    "respect_robots": true,
+    "user_agent": "CSDI-RAG-Engine/1.0 (documentation crawler)",
+    "crawl_delay_seconds": 1.0,
+    "max_pages": 300,
+    "max_retries": 2,
+    "request_timeout_seconds": 15.0,
+    "allowed_content_types": ["text/html"],
+    "blocked_extensions": [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".svg",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3"
+    ],
+    "strip_query_strings": true,
+    "allowed_query_params": [],
+    "scraper": {
+      "main_content_selectors": [
+        "main",
+        "article",
+        "[role=\"main\"]"
+      ],
+      "title_selectors": [
+        "main h1",
+        "article h1",
+        "h1",
+        "title"
+      ],
+      "breadcrumb_selectors": [
+        "nav[aria-label=\"Breadcrumb\"] a",
+        "nav[aria-label=\"breadcrumb\"] a",
+        ".breadcrumb a"
+      ],
+      "code_block_selectors": [
+        "pre",
+        "code"
+      ],
+      "exclude_selectors": [
+        "script",
+        "style",
+        "noscript",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        ".toc",
+        ".sidebar"
+      ]
+    }
+  },
+  {
+    "source_id": "typescript_docs",
+    "name": "TypeScript Docs",
+    "base_url": "https://www.typescriptlang.org",
+    "allowed_domains": ["www.typescriptlang.org"],
+    "seed_urls": ["https://www.typescriptlang.org/docs/"],
+    "allowed_path_prefixes": ["/docs/"],
+    "blocked_path_patterns": ["/search", "/play"],
+    "max_depth": 2,
+    "technology": ["typescript", "javascript", "language"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]", ".markdown"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "nodejs_docs",
+    "name": "Node.js Docs",
+    "base_url": "https://nodejs.org",
+    "allowed_domains": ["nodejs.org"],
+    "seed_urls": ["https://nodejs.org/docs/latest/api/"],
+    "allowed_path_prefixes": ["/docs/latest/api/"],
+    "blocked_path_patterns": ["/download", "/blog"],
+    "max_depth": 2,
+    "technology": ["nodejs", "javascript", "runtime"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#apicontent", "#content", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "#apicontent h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "go_docs",
+    "name": "Go Docs",
+    "base_url": "https://go.dev",
+    "allowed_domains": ["go.dev"],
+    "seed_urls": ["https://go.dev/doc/", "https://go.dev/ref/", "https://go.dev/tour/"],
+    "allowed_path_prefixes": ["/doc/", "/ref/", "/tour/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["go", "golang", "language"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#page", ".Article", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".Article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "rust_book",
+    "name": "Rust Book",
+    "base_url": "https://doc.rust-lang.org",
+    "allowed_domains": ["doc.rust-lang.org"],
+    "seed_urls": ["https://doc.rust-lang.org/book/"],
+    "allowed_path_prefixes": ["/book/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["rust", "language"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#content", ".content", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "#content h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".sidebar", ".chapter", ".toc"]
+    }
+  },
+  {
+    "source_id": "rust_std",
+    "name": "Rust Standard Library",
+    "base_url": "https://doc.rust-lang.org",
+    "allowed_domains": ["doc.rust-lang.org"],
+    "seed_urls": ["https://doc.rust-lang.org/std/"],
+    "allowed_path_prefixes": ["/std/"],
+    "blocked_path_patterns": ["/search", "/src/"],
+    "max_depth": 1,
+    "technology": ["rust", "standard-library"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "#main-content", ".docblock", "#content", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "#main-content h1", "h1", "title"],
+      "breadcrumb_selectors": [".breadcrumbs a", "nav[aria-label=\"breadcrumb\"] a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".sidebar", ".toc"]
+    }
+  },
+  {
+    "source_id": "java_docs",
+    "name": "Java Docs",
+    "base_url": "https://docs.oracle.com",
+    "allowed_domains": ["docs.oracle.com"],
+    "seed_urls": ["https://docs.oracle.com/en/java/"],
+    "allowed_path_prefixes": ["/en/java/"],
+    "blocked_path_patterns": ["/search", "/downloads"],
+    "max_depth": 2,
+    "technology": ["java", "language", "jvm"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#content", ".content", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "#content h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "kotlin_docs",
+    "name": "Kotlin Docs",
+    "base_url": "https://kotlinlang.org",
+    "allowed_domains": ["kotlinlang.org"],
+    "seed_urls": ["https://kotlinlang.org/docs/home.html"],
+    "allowed_path_prefixes": ["/docs/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["kotlin", "language", "jvm"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", ".article", ".markdown", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "csharp_docs",
+    "name": "C# Docs",
+    "base_url": "https://learn.microsoft.com",
+    "allowed_domains": ["learn.microsoft.com"],
+    "seed_urls": ["https://learn.microsoft.com/en-us/dotnet/csharp/"],
+    "allowed_path_prefixes": ["/en-us/dotnet/csharp/"],
+    "blocked_path_patterns": ["/search", "/answers/"],
+    "max_depth": 2,
+    "technology": ["csharp", "dotnet", "language"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#main", ".content", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "#main h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"Breadcrumb\"] a", "nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "react_docs",
+    "name": "React Docs",
+    "base_url": "https://react.dev",
+    "allowed_domains": ["react.dev"],
+    "seed_urls": ["https://react.dev/learn", "https://react.dev/reference/react"],
+    "allowed_path_prefixes": ["/learn", "/reference/"],
+    "blocked_path_patterns": ["/community", "/blog"],
+    "max_depth": 2,
+    "technology": ["react", "javascript", "frontend"],
+    "max_pages": 220,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "nextjs_docs",
+    "name": "Next.js Docs",
+    "base_url": "https://nextjs.org",
+    "allowed_domains": ["nextjs.org"],
+    "seed_urls": ["https://nextjs.org/docs"],
+    "allowed_path_prefixes": ["/docs"],
+    "blocked_path_patterns": ["/search", "/showcase", "/blog"],
+    "max_depth": 2,
+    "technology": ["nextjs", "react", "javascript", "frontend"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "vue_docs",
+    "name": "Vue Docs",
+    "base_url": "https://vuejs.org",
+    "allowed_domains": ["vuejs.org"],
+    "seed_urls": ["https://vuejs.org/guide/introduction.html", "https://vuejs.org/api/"],
+    "allowed_path_prefixes": ["/guide/", "/api/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["vue", "javascript", "frontend"],
+    "max_pages": 220,
+    "scraper": {
+      "main_content_selectors": ["main", "article", ".vp-doc", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".vp-doc h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "angular_docs",
+    "name": "Angular Docs",
+    "base_url": "https://angular.dev",
+    "allowed_domains": ["angular.dev"],
+    "seed_urls": ["https://angular.dev/overview", "https://angular.dev/guide", "https://angular.dev/reference"],
+    "allowed_path_prefixes": ["/overview", "/guide", "/reference", "/api"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["angular", "typescript", "frontend"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]", ".docs-content"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "svelte_docs",
+    "name": "Svelte Docs",
+    "base_url": "https://svelte.dev",
+    "allowed_domains": ["svelte.dev"],
+    "seed_urls": ["https://svelte.dev/docs"],
+    "allowed_path_prefixes": ["/docs"],
+    "blocked_path_patterns": ["/search", "/blog"],
+    "max_depth": 2,
+    "technology": ["svelte", "javascript", "frontend"],
+    "max_pages": 220,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]", ".markdown"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "fastapi_docs",
+    "name": "FastAPI Docs",
+    "base_url": "https://fastapi.tiangolo.com",
+    "allowed_domains": ["fastapi.tiangolo.com"],
+    "seed_urls": ["https://fastapi.tiangolo.com/"],
+    "allowed_path_prefixes": ["/", "/tutorial/", "/advanced/", "/reference/"],
+    "blocked_path_patterns": ["/search", "/newsletter", "/sponsors"],
+    "max_depth": 2,
+    "technology": ["fastapi", "python", "backend"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", ".md-content", ".md-content__inner", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".md-content h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".md-path a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".md-sidebar", ".toc"]
+    }
+  },
+  {
+    "source_id": "django_docs",
+    "name": "Django Docs",
+    "base_url": "https://docs.djangoproject.com",
+    "allowed_domains": ["docs.djangoproject.com"],
+    "seed_urls": ["https://docs.djangoproject.com/en/stable/"],
+    "allowed_path_prefixes": ["/en/stable/"],
+    "blocked_path_patterns": ["/search", "/genindex"],
+    "max_depth": 2,
+    "technology": ["django", "python", "backend"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "#docs-content", ".document", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "#docs-content h1", "h1", "title"],
+      "breadcrumb_selectors": [".breadcrumbs a", "nav[aria-label=\"breadcrumb\"] a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".sidebar", ".toc"]
+    }
+  },
+  {
+    "source_id": "flask_docs",
+    "name": "Flask Docs",
+    "base_url": "https://flask.palletsprojects.com",
+    "allowed_domains": ["flask.palletsprojects.com"],
+    "seed_urls": ["https://flask.palletsprojects.com/en/stable/"],
+    "allowed_path_prefixes": ["/en/stable/"],
+    "blocked_path_patterns": ["/search.html", "/genindex"],
+    "max_depth": 2,
+    "technology": ["flask", "python", "backend"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main[role=\"main\"]", "div[role=\"main\"]", ".body", ".document", "article"],
+      "title_selectors": ["h1", "title"],
+      "breadcrumb_selectors": [".breadcrumbs a", ".wy-breadcrumbs a", ".related a"],
+      "code_block_selectors": ["div.highlight pre", "pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".sphinxsidebar", ".related", ".toc"]
+    }
+  },
+  {
+    "source_id": "pydantic_docs",
+    "name": "Pydantic Docs",
+    "base_url": "https://docs.pydantic.dev",
+    "allowed_domains": ["docs.pydantic.dev"],
+    "seed_urls": ["https://docs.pydantic.dev/latest/"],
+    "allowed_path_prefixes": ["/latest/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["pydantic", "python", "validation"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main", "article", ".md-content", ".md-content__inner", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".md-content h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".md-path a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".md-sidebar", ".toc"]
+    }
+  },
+  {
+    "source_id": "pytest_docs",
+    "name": "pytest Docs",
+    "base_url": "https://docs.pytest.org",
+    "allowed_domains": ["docs.pytest.org"],
+    "seed_urls": ["https://docs.pytest.org/en/stable/"],
+    "allowed_path_prefixes": ["/en/stable/"],
+    "blocked_path_patterns": ["/search.html", "/genindex"],
+    "max_depth": 2,
+    "technology": ["pytest", "python", "testing"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main[role=\"main\"]", "div[role=\"main\"]", ".body", ".document", "article"],
+      "title_selectors": ["h1", "title"],
+      "breadcrumb_selectors": [".breadcrumbs a", ".wy-breadcrumbs a", ".related a"],
+      "code_block_selectors": ["div.highlight pre", "pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".sphinxsidebar", ".related", ".toc"]
+    }
+  },
+  {
+    "source_id": "tailwind_docs",
+    "name": "Tailwind CSS Docs",
+    "base_url": "https://tailwindcss.com",
+    "allowed_domains": ["tailwindcss.com"],
+    "seed_urls": ["https://tailwindcss.com/docs"],
+    "allowed_path_prefixes": ["/docs"],
+    "blocked_path_patterns": ["/blog", "/showcase", "/plus"],
+    "max_depth": 2,
+    "technology": ["tailwind", "css", "frontend"],
+    "max_pages": 200,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "vite_docs",
+    "name": "Vite Docs",
+    "base_url": "https://vite.dev",
+    "allowed_domains": ["vite.dev"],
+    "seed_urls": ["https://vite.dev/guide/", "https://vite.dev/config/"],
+    "allowed_path_prefixes": ["/guide/", "/config/", "/plugins/"],
+    "blocked_path_patterns": ["/search"],
+    "max_depth": 2,
+    "technology": ["vite", "javascript", "frontend", "build-tool"],
+    "max_pages": 180,
+    "scraper": {
+      "main_content_selectors": ["main", "article", ".vp-doc", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", ".vp-doc h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "redis_docs",
+    "name": "Redis Docs",
+    "base_url": "https://redis.io",
+    "allowed_domains": ["redis.io"],
+    "seed_urls": ["https://redis.io/docs/latest/"],
+    "allowed_path_prefixes": ["/docs/latest/"],
+    "blocked_path_patterns": ["/search", "/blog"],
+    "max_depth": 2,
+    "technology": ["redis", "database", "cache"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]", ".prose"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "mongodb_docs",
+    "name": "MongoDB Docs",
+    "base_url": "https://www.mongodb.com",
+    "allowed_domains": ["www.mongodb.com"],
+    "seed_urls": ["https://www.mongodb.com/docs/"],
+    "allowed_path_prefixes": ["/docs/"],
+    "blocked_path_patterns": ["/search", "/pricing", "/products"],
+    "max_depth": 2,
+    "technology": ["mongodb", "database", "nosql"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]", ".docs-content"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
+  },
+  {
+    "source_id": "terraform_docs",
+    "name": "Terraform Docs",
+    "base_url": "https://developer.hashicorp.com",
+    "allowed_domains": ["developer.hashicorp.com"],
+    "seed_urls": ["https://developer.hashicorp.com/terraform/docs"],
+    "allowed_path_prefixes": ["/terraform/docs", "/terraform/language", "/terraform/cli"],
+    "blocked_path_patterns": ["/search", "/hcp/"],
+    "max_depth": 2,
+    "technology": ["terraform", "devops", "infrastructure"],
+    "max_pages": 250,
+    "scraper": {
+      "main_content_selectors": ["main", "article", "[role=\"main\"]"],
+      "title_selectors": ["main h1", "article h1", "h1", "title"],
+      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
+      "code_block_selectors": ["pre", "code"],
+      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
+    }
   }
 ]
