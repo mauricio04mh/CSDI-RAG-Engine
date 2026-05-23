@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Float, ForeignKey, Integer, Text, func
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, TIMESTAMP, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -22,6 +22,8 @@ class WebCacheDocument(Base):
     provider: Mapped[str] = mapped_column(Text, nullable=False, default="web")
     content_hash: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     extra_metadata: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    published_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    document_updated_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     fetched_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)
     created_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[str] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -37,6 +39,8 @@ class WebCacheChunk(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     breadcrumb: Mapped[str] = mapped_column(Text, nullable=False, default="")
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    published_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    document_updated_at: Mapped[str | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[str] = mapped_column(server_default=func.now(), nullable=False)
 
 

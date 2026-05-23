@@ -36,6 +36,8 @@ class SourceDocumentRepository:
             "fetch_method": document.fetch_method,
             "crawl_depth": document.crawl_depth,
             "discovered_from_url": document.discovered_from_url,
+            "published_at": document.published_at,
+            "document_updated_at": document.document_updated_at,
             "content_hash": document.content_hash,
             "is_active": True,
             "fetched_at": fetched_at,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -47,6 +48,8 @@ class WebCacheDocumentRepository:
                     "provider": provider,
                     "content_hash": hashlib.sha256(doc.text.encode("utf-8")).hexdigest(),
                     "metadata": dict(doc.metadata),
+                    "published_at": _metadata_datetime(doc.metadata.get("published_at")),
+                    "document_updated_at": _metadata_datetime(doc.metadata.get("document_updated_at")),
                 }
             )
 
@@ -59,6 +62,8 @@ class WebCacheDocumentRepository:
                 "provider": stmt.excluded.provider,
                 "content_hash": stmt.excluded.content_hash,
                 "metadata": stmt.excluded["metadata"],
+                "published_at": stmt.excluded.published_at,
+                "document_updated_at": stmt.excluded.document_updated_at,
                 "fetched_at": func.now(),
                 "updated_at": func.now(),
             },
@@ -94,3 +99,12 @@ class WebCacheBM25Repository(BM25Repository):
     term_model = WebCacheBM25Term
     posting_model = WebCacheBM25Posting
     doc_length_model = WebCacheBM25DocLength
+
+
+def _metadata_datetime(value) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None

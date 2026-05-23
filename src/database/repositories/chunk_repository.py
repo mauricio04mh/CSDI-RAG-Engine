@@ -33,6 +33,8 @@ class ChunkRepository:
                 "title": c.title,
                 "breadcrumb": c.breadcrumb,
                 "text": c.text,
+                "published_at": c.published_at,
+                "document_updated_at": c.document_updated_at,
             }
             for c in chunks
         ]

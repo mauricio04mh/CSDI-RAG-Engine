@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from src.database.repositories.chunk_repository import ChunkRepository
 from src.hybrid.pipeline.hybrid_retriever import HybridRetriever
+from src.positioning import build_positioned_results
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["search"])
@@ -24,6 +25,12 @@ class SearchRequest(BaseModel):
 class SearchResultItem(BaseModel):
     chunk_id: str
     score: float
+    relevance_score: float
+    freshness_score: float
+    display_priority: float
+    rank: int
+    source_type: str
+    retrieval_method: str
     source_id: str
     url: str
     title: str
@@ -53,15 +60,24 @@ def search_web_cache(payload: SearchRequest, request: Request) -> SearchResponse
     chunk_ids = [h.doc_id for h in hits]
     chunks = chunk_repo.get_chunks(chunk_ids)
     score_map = {h.doc_id: h.score for h in hits}
+    positioned = build_positioned_results(payload.query, hits, chunks)
 
     results: list[SearchResultItem] = []
-    for chunk_id in chunk_ids:
+    ordered_chunk_ids = sorted(positioned, key=lambda chunk_id: positioned[chunk_id].rank)
+    for chunk_id in ordered_chunk_ids:
         chunk = chunks.get(chunk_id)
         if chunk is None:
             continue
+        pos = positioned[chunk_id]
         results.append(SearchResultItem(
             chunk_id=chunk_id,
             score=score_map[chunk_id],
+            relevance_score=pos.relevance_score,
+            freshness_score=pos.freshness_score,
+            display_priority=pos.display_priority,
+            rank=pos.rank,
+            source_type=pos.source_type,
+            retrieval_method=pos.retrieval_method,
             source_id=chunk.source_id,
             url=chunk.url,
             title=chunk.title,
@@ -93,6 +109,7 @@ def search(payload: SearchRequest, request: Request) -> SearchResponse:
     chunk_ids = [h.doc_id for h in hits]
     chunks = chunk_repo.get_chunks(chunk_ids)
     score_map = {h.doc_id: h.score for h in hits}
+    positioned = build_positioned_results(payload.query, hits, chunks)
     missing_chunks = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunks]
     logger.info(
         "hybrid_search_trace query=%s requested_top_k=%s retrieved_hits=%s resolved_chunks=%s missing_chunks=%s top_ids=%s",
@@ -105,13 +122,21 @@ def search(payload: SearchRequest, request: Request) -> SearchResponse:
     )
 
     results: list[SearchResultItem] = []
-    for chunk_id in chunk_ids:
+    ordered_chunk_ids = sorted(positioned, key=lambda chunk_id: positioned[chunk_id].rank)
+    for chunk_id in ordered_chunk_ids:
         chunk = chunks.get(chunk_id)
         if chunk is None:
             continue
+        pos = positioned[chunk_id]
         results.append(SearchResultItem(
             chunk_id=chunk_id,
             score=score_map[chunk_id],
+            relevance_score=pos.relevance_score,
+            freshness_score=pos.freshness_score,
+            display_priority=pos.display_priority,
+            rank=pos.rank,
+            source_type=pos.source_type,
+            retrieval_method=pos.retrieval_method,
             source_id=chunk.source_id,
             url=chunk.url,
             title=chunk.title,

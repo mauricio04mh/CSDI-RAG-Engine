@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -125,6 +126,8 @@ class WebSearchOrchestrator:
                     title=doc.title,
                     breadcrumb="web-search",
                     content=doc.text,
+                    published_at=_metadata_datetime(doc.metadata.get("published_at")),
+                    document_updated_at=_metadata_datetime(doc.metadata.get("document_updated_at")),
                 )
             )
 
@@ -162,3 +165,13 @@ def _source_id_from_url(url: str, *, provider: str) -> str:
     safe_provider = _SAFE_SOURCE.sub("-", provider.lower()).strip("-") or "web"
     safe_domain = _SAFE_SOURCE.sub("-", domain).strip("-") or "unknown-domain"
     return f"web:{safe_provider}:{safe_domain}"
+
+
+def _metadata_datetime(value) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None

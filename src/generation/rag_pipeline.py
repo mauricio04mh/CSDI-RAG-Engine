@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from src.generation.config.settings import GenerationSettings
 from src.generation.prompt_builder import build_messages
+from src.positioning import build_positioned_results
 from src.web_search.orchestrator import WebSearchOrchestrator
 from src.web_search.insufficiency_detector.detector import InsufficiencyDetector
 from src.web_search.insufficiency_detector.schemas import RetrievedChunk
@@ -27,6 +28,10 @@ class RAGSource:
     title: str
     source_type: str = "corpus"
     retrieval_method: str = "hybrid"
+    relevance_score: float = 0.0
+    freshness_score: float = 0.5
+    display_priority: float = 0.0
+    rank: int = 0
 
 
 @dataclass(slots=True)
@@ -176,6 +181,11 @@ class RAGPipeline:
                 )
 
         found_by_map = {h.doc_id: getattr(h, "found_by", frozenset()) for h in final_hits}
+        positioned = build_positioned_results(
+            question,
+            final_hits,
+            {c.chunk_id: c for c in final_chunks},
+        )
         sources = [
             RAGSource(
                 chunk_id=c.chunk_id,
@@ -183,9 +193,14 @@ class RAGPipeline:
                 title=c.title,
                 source_type=_source_type_for_chunk(c),
                 retrieval_method=_retrieval_method_for_chunk(c, found_by_map),
+                relevance_score=positioned[c.chunk_id].relevance_score if c.chunk_id in positioned else 0.0,
+                freshness_score=positioned[c.chunk_id].freshness_score if c.chunk_id in positioned else 0.5,
+                display_priority=positioned[c.chunk_id].display_priority if c.chunk_id in positioned else 0.0,
+                rank=positioned[c.chunk_id].rank if c.chunk_id in positioned else 0,
             )
             for c in final_chunks
         ]
+        sources.sort(key=lambda source: source.rank or 9999)
 
         # 3. Build prompt and call LLM
         messages = build_messages(question, final_chunks)

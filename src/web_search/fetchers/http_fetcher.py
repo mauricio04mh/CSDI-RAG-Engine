@@ -49,6 +49,7 @@ class HttpDocumentFetcher:
                 html=response.text,
                 config=_WEB_SEARCH_SCRAPER_CONFIG,
                 source_id="web-search",
+                response_headers=dict(response.headers),
             )
             if scraped is None:
                 logger.warning("web_search_parse_failed url=%s", hit.url)
@@ -72,7 +73,11 @@ class HttpDocumentFetcher:
             metadata={
                 "provider": hit.provider,
                 "status_code": response.status_code,
-                "content_type": content_type,
-                "breadcrumb": breadcrumb,
-            },
-        )
+                    "content_type": content_type,
+                    "breadcrumb": breadcrumb,
+                    "published_at": scraped.published_at.isoformat() if scraped.published_at else None,
+                    "document_updated_at": (
+                        scraped.document_updated_at.isoformat() if scraped.document_updated_at else None
+                    ),
+                },
+            )

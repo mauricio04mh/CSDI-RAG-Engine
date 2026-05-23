@@ -21,6 +21,8 @@ class SourceDocumentInput:
     fetch_method: str = "http"
     crawl_depth: int | None = None
     discovered_from_url: str | None = None
+    published_at: datetime | None = None
+    document_updated_at: datetime | None = None
     fetched_at: datetime | None = None
     last_seen_at: datetime | None = None
 

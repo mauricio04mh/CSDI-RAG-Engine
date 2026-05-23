@@ -23,6 +23,11 @@ class SourceItem(BaseModel):
     url: str
     title: str
     source_type: str = "corpus"
+    retrieval_method: str = "hybrid"
+    relevance_score: float = 0.0
+    freshness_score: float = 0.5
+    display_priority: float = 0.0
+    rank: int = 0
 
 
 class WebSearchInfo(BaseModel):
@@ -80,7 +85,17 @@ def rag_query(payload: RAGRequest, request: Request) -> RAGResponse:
         query=result.query,
         answer=result.answer,
         sources=[
-            SourceItem(chunk_id=s.chunk_id, url=s.url, title=s.title, source_type=s.source_type)
+            SourceItem(
+                chunk_id=s.chunk_id,
+                url=s.url,
+                title=s.title,
+                source_type=s.source_type,
+                retrieval_method=s.retrieval_method,
+                relevance_score=s.relevance_score,
+                freshness_score=s.freshness_score,
+                display_priority=s.display_priority,
+                rank=s.rank,
+            )
             for s in result.sources
         ],
         model=result.model,
@@ -111,6 +126,11 @@ def rag_query(payload: RAGRequest, request: Request) -> RAGResponse:
                         "url": s.url,
                         "title": s.title,
                         "source_type": s.source_type,
+                        "retrieval_method": s.retrieval_method,
+                        "relevance_score": s.relevance_score,
+                        "freshness_score": s.freshness_score,
+                        "display_priority": s.display_priority,
+                        "rank": s.rank,
                     }
                     for s in response.sources
                 ],
@@ -147,6 +167,13 @@ def get_chat_history(session_id: str, request: Request) -> ChatHistoryResponse:
                                 url=url,
                                 title=title,
                                 source_type=source_type if isinstance(source_type, str) else "corpus",
+                                retrieval_method=source.get("retrieval_method", "hybrid")
+                                if isinstance(source.get("retrieval_method", "hybrid"), str)
+                                else "hybrid",
+                                relevance_score=float(source.get("relevance_score", 0.0) or 0.0),
+                                freshness_score=float(source.get("freshness_score", 0.5) or 0.5),
+                                display_priority=float(source.get("display_priority", 0.0) or 0.0),
+                                rank=int(source.get("rank", 0) or 0),
                             )
                         )
             sources = safe_sources

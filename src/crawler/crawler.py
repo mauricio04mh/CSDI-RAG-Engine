@@ -34,6 +34,7 @@ class CrawledPage:
     content_type: str = "text/html"
     depth: int = 0
     discovered_from_url: str | None = None
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -159,6 +160,7 @@ class Crawler:
                 html=response.text,
                 status_code=response.status_code,
                 content_type=content_type,
+                headers=dict(response.headers),
             )
 
         return None

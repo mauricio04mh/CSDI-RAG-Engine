@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 _WHITESPACE = re.compile(r"\s+")
 # Split after sentence-ending punctuation followed by whitespace.
@@ -19,6 +20,8 @@ class DocumentChunk:
     title: str
     breadcrumb: str
     text: str           # cleaned, ready to embed or tokenize
+    published_at: datetime | None = None
+    document_updated_at: datetime | None = None
 
 
 def _make_chunk(
@@ -29,6 +32,8 @@ def _make_chunk(
     breadcrumb: str,
     words: list[str],
     index: int,
+    published_at: datetime | None = None,
+    document_updated_at: datetime | None = None,
 ) -> DocumentChunk:
     return DocumentChunk(
         chunk_id=f"{source_id}:{url_hash}:{index}",
@@ -37,6 +42,8 @@ def _make_chunk(
         title=title,
         breadcrumb=breadcrumb,
         text=" ".join(words),
+        published_at=published_at,
+        document_updated_at=document_updated_at,
     )
 
 
@@ -65,6 +72,8 @@ class Chunker:
         title: str,
         breadcrumb: str,
         content: str,
+        published_at: datetime | None = None,
+        document_updated_at: datetime | None = None,
     ) -> list[DocumentChunk]:
         cleaned = self._clean(content)
         if not cleaned:
@@ -85,28 +94,68 @@ class Chunker:
             # Edge case: single sentence exceeds chunk_size — word-level fallback.
             if len(s_words) > self.chunk_size:
                 if current_words:
-                    chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
+                    chunks.append(_make_chunk(
+                        source_id,
+                        url_hash,
+                        url,
+                        title,
+                        breadcrumb,
+                        current_words,
+                        index,
+                        published_at,
+                        document_updated_at,
+                    ))
                     index += 1
 
                 step = self.chunk_size - self.chunk_overlap
                 for start in range(0, len(s_words), step):
                     window = s_words[start : start + self.chunk_size]
                     if window:
-                        chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, window, index))
+                        chunks.append(_make_chunk(
+                            source_id,
+                            url_hash,
+                            url,
+                            title,
+                            breadcrumb,
+                            window,
+                            index,
+                            published_at,
+                            document_updated_at,
+                        ))
                         index += 1
                 current_words = []
                 continue
 
             # Flush and carry overlap when adding this sentence would overflow.
             if current_words and len(current_words) + len(s_words) > self.chunk_size:
-                chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
+                chunks.append(_make_chunk(
+                    source_id,
+                    url_hash,
+                    url,
+                    title,
+                    breadcrumb,
+                    current_words,
+                    index,
+                    published_at,
+                    document_updated_at,
+                ))
                 index += 1
                 current_words = current_words[-self.chunk_overlap:] if self.chunk_overlap else []
 
             current_words.extend(s_words)
 
         if current_words:
-            chunks.append(_make_chunk(source_id, url_hash, url, title, breadcrumb, current_words, index))
+            chunks.append(_make_chunk(
+                source_id,
+                url_hash,
+                url,
+                title,
+                breadcrumb,
+                current_words,
+                index,
+                published_at,
+                document_updated_at,
+            ))
 
         return chunks
 

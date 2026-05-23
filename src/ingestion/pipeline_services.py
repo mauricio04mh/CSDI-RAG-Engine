@@ -40,6 +40,7 @@ class ScrapeStageService:
             html=page.html,
             config=source.scraper,
             source_id=source.source_id,
+            response_headers=page.headers,
         )
 
 
@@ -65,6 +66,8 @@ class SourceDocumentPersistenceService:
             fetch_method="http",
             crawl_depth=page.depth,
             discovered_from_url=page.discovered_from_url,
+            published_at=doc.published_at,
+            document_updated_at=doc.document_updated_at,
         )
         return self._source_document_repo.save_document(payload)
 
@@ -80,6 +83,8 @@ class ChunkPreparationService:
             title=doc.title,
             breadcrumb=doc.breadcrumb,
             content=doc.content,
+            published_at=doc.published_at,
+            document_updated_at=doc.document_updated_at,
         )
 
 
