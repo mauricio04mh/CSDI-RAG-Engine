@@ -119,6 +119,20 @@ class VectorRepository:
             logger.info("vector_document_soft_deleted doc_id=%s", doc_id)
         return deleted
 
+    def delete_by_doc_ids(self, doc_ids: list[str]) -> int:
+        """Bulk soft-delete documents by doc_id list. Returns count marked deleted."""
+        if not doc_ids:
+            return 0
+        with Session(self.engine) as session, session.begin():
+            result = session.execute(
+                update(VectorDocument)
+                .where(VectorDocument.doc_id.in_(doc_ids))
+                .where(VectorDocument.deleted_at.is_(None))
+                .values(deleted_at=func.now())
+            )
+        logger.info("vector_documents_soft_deleted count=%s", result.rowcount)
+        return result.rowcount
+
     def load_all_doc_ids(self) -> list[str]:
         """Load only doc_ids (no embeddings) for non-deleted documents, ordered by insertion."""
         with Session(self.engine) as session:

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from src.database.models.source_document_models import SourceDocument
 from src.ingestion.source_documents import SourceDocumentInput
@@ -58,6 +62,15 @@ class SourceDocumentRepository:
         )
         with Session(self.engine) as session, session.begin():
             return session.execute(stmt).scalar_one()
+
+    def delete_by_source_id(self, source_id: str) -> int:
+        """Hard-delete all source documents for a source. Returns count deleted."""
+        with Session(self.engine) as session, session.begin():
+            result = session.execute(
+                sa_delete(SourceDocument).where(SourceDocument.source_id == source_id)
+            )
+        logger.info("source_documents_deleted source_id=%s count=%s", source_id, result.rowcount)
+        return result.rowcount
 
     def get_by_document_id(self, document_id: str) -> SourceDocument | None:
         with Session(self.engine) as session:
