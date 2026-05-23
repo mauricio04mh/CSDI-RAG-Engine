@@ -77,6 +77,14 @@ class IndexBuilder:
         self.flush(force=True)
         logger.info("index_builder_stopped")
 
+    def delete_documents(self, doc_ids: list[str]) -> int:
+        """Remove BM25 postings and doc_lengths for the given doc_ids from all segments.
+
+        Used by deindex to clean up stale BM25 data before reloading the retriever.
+        Returns the count of doc_length rows deleted.
+        """
+        return self._bm25_repo.delete_doc_ids(doc_ids)
+
     def add_document(self, doc_id: str, tokens: list[str]) -> IndexedDocumentResult:
         if not tokens:
             raise ValueError("Document must contain at least one token.")

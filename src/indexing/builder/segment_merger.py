@@ -83,7 +83,9 @@ class SegmentMerger:
     def _merge_doc_lengths(self, merged: dict[str, int], segment: IndexSegment) -> None:
         for doc_id, length in segment.doc_lengths.items():
             if doc_id in merged:
-                raise ValueError(f"Duplicate doc_id '{doc_id}' found while merging segments.")
+                logger.warning(
+                    "duplicate_doc_id_in_segments doc_id=%s — keeping latest occurrence", doc_id
+                )
             merged[doc_id] = int(length)
 
     def _merge_postings(self, merged: dict[str, list[dict]], segment: IndexSegment) -> None:
