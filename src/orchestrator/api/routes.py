@@ -29,6 +29,13 @@ class IngestResponse(BaseModel):
     chunks_indexed: int
 
 
+class DeindexResponse(BaseModel):
+    source_id: str
+    chunks_deleted: int
+    vectors_deleted: int
+    documents_deleted: int
+
+
 class IngestProgressResponse(BaseModel):
     source_id: str
     phase: str
@@ -126,6 +133,65 @@ def ingest_source(payload: IngestSourceRequest, request: Request) -> IngestRespo
         pages_scraped=report.pages_scraped,
         chunks_produced=report.chunks_produced,
         chunks_indexed=report.chunks_indexed,
+    )
+
+
+@router.delete("/sources/{source_id}", response_model=DeindexResponse)
+def deindex_source(source_id: str, request: Request) -> DeindexResponse:
+    """Remove all indexed data for a source (chunks, vectors, source documents).
+
+    Configured sources remain in the config but are reset to 0 chunks.
+    User-added sources are fully removed from the system.
+    """
+    chunk_repo = request.app.state.chunk_repo
+    source_document_repo = request.app.state.source_document_repo
+    vector_index_builder = request.app.state.vector_index_builder
+    index_builder = request.app.state.index_builder
+    bm25_retriever: BM25Retriever = request.app.state.bm25_retriever
+    tracker: IngestionTracker = request.app.state.ingestion_tracker
+    user_source_repo = request.app.state.user_source_repo
+    source_repo = request.app.state.source_repo
+
+    is_configured = source_repo.exists(source_id)
+    is_user_source = any(s.source_id == source_id for s in user_source_repo.list_sources())
+
+    if not is_configured and not is_user_source:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found.")
+
+    # 1. Collect chunk_ids before deleting (needed for vector soft-delete)
+    chunk_ids = chunk_repo.get_chunk_ids_by_source_id(source_id)
+
+    # 2. Soft-delete vectors and tombstone in-memory (instant effect on searches)
+    vectors_deleted = vector_index_builder.remove_documents(chunk_ids) if chunk_ids else 0
+
+    # 3. Clean up BM25 postings and doc_lengths for these chunk_ids
+    if chunk_ids:
+        index_builder.delete_documents(chunk_ids)
+
+    # 4. Hard-delete chunks and source documents
+    chunks_deleted = chunk_repo.delete_by_source_id(source_id)
+    documents_deleted = source_document_repo.delete_by_source_id(source_id)
+
+    # 5. Remove user source entry if applicable
+    if is_user_source:
+        user_source_repo.remove_source(source_id)
+
+    # 6. Clear ingestion history
+    tracker.clear_source(source_id)
+
+    # 7. Reload BM25 in-memory index (now without the deleted docs)
+    bm25_retriever.reload()
+
+    logger.info(
+        "source_deindexed source=%s chunks=%s vectors=%s documents=%s",
+        source_id, chunks_deleted, vectors_deleted, documents_deleted,
+    )
+
+    return DeindexResponse(
+        source_id=source_id,
+        chunks_deleted=chunks_deleted,
+        vectors_deleted=vectors_deleted,
+        documents_deleted=documents_deleted,
     )
 
 

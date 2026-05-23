@@ -39,6 +39,16 @@ class UserSourceRepository:
             )
         self._save()
 
+    def remove_source(self, source_id: str) -> bool:
+        """Remove a user source. Returns True if it existed."""
+        with self._lock:
+            if source_id not in self._sources:
+                return False
+            del self._sources[source_id]
+        self._save()
+        logger.info("user_source_removed source_id=%s", source_id)
+        return True
+
     def list_sources(self) -> list[UserSource]:
         with self._lock:
             return list(self._sources.values())
