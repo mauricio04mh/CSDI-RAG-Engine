@@ -1,0 +1,238 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{microtype}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+\setstretch{1.08}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\setlist{nosep,leftmargin=*}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{CSDI RAG Engine}
+\rhead{Expansión y retroalimentación}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{0.75em}{}
+\titlespacing*{\section}{0pt}{1.1em}{0.45em}
+
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+
+\lstdefinestyle{codeblock}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!8},
+  frame=single,
+  rulecolor=\color{gray!35},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=0.4em,
+  xrightmargin=0.4em,
+  aboveskip=0.55em,
+  belowskip=0.55em
+}
+\lstset{style=codeblock}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries Informe del módulo de expansión y retroalimentación}\\[0.35cm]
+  {\large CSDI RAG Engine}
+\end{center}
+\vspace{0.2cm}
+
+\section{Módulo de expansión y retroalimentación}
+
+El módulo de expansión y retroalimentación es una capa complementaria sobre el recuperador híbrido del sistema. Su responsabilidad es enriquecer consultas y reutilizar señales de relevancia para mejorar la recuperación de información sin reemplazar a BM25, a la búsqueda vectorial ni a la combinación híbrida. El módulo opera después de que existen documentos fragmentados e indexados, y trabaja sobre los chunks recuperables del corpus técnico.
+
+Su funcionamiento combina dos mecanismos. El primero es la expansión de consulta basada en pseudo-relevancia: cuando no existe feedback explícito suficiente, el sistema toma los primeros documentos de una recuperación inicial como documentos provisionalmente relevantes y extrae de ellos términos que pueden enriquecer la consulta original. El segundo mecanismo es el uso de feedback explícito almacenado: cuando existen valoraciones previas asociadas a una consulta o a consultas muy similares, el sistema puede ajustar el ranking mediante boosts o penalizaciones.
+
+La salida del módulo no es una respuesta generada, sino una recuperación enriquecida y trazable. El sistema puede devolver consulta original, consulta expandida, términos añadidos, documentos usados como evidencia, feedback aplicado, puntuación original y puntuación ajustada. Esta trazabilidad permite analizar por qué un resultado aparece en una posición determinada y si la mejora proviene de pseudo-relevancia, de feedback explícito o de ambos.
+
+El módulo se integró inicialmente en el Explorador de Búsqueda porque allí es posible comparar rankings, inspeccionar scores y capturar preferencias de manera controlada. La integración directa con el Chat queda como una extensión futura, ya que implicaría conectar el re-ranking por feedback al pipeline de generación RAG.
+
+\section{Fundamento técnico}
+
+La expansión de consultas busca compensar consultas breves o incompletas. En documentación técnica, una consulta como \texttt{decorators python} puede beneficiarse de términos presentes en documentos relevantes, como \texttt{wrapper}, \texttt{function}, \texttt{@decorator} o \texttt{higher order function}. En vez de usar diccionarios externos o listas genéricas de sinónimos, el módulo extrae términos desde el propio corpus, lo que mantiene la expansión alineada con el dominio real del sistema.
+
+Cuando no hay feedback explícito, la estrategia usada es \textit{pseudo-relevance feedback}. Esta técnica asume provisionalmente que los documentos mejor posicionados por una primera recuperación contienen vocabulario útil para reformular la consulta. Esa hipótesis no equivale a una validación humana: los documentos son pseudo-relevantes porque el sistema los colocó arriba en el ranking, no porque el usuario los haya marcado como útiles.
+
+El feedback explícito es una señal distinta. En este caso, el usuario o el flujo A/B registra una valoración sobre la relación entre una consulta y un chunk. La escala utilizada es graduada:
+
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+\textbf{Valor} & \textbf{Interpretación} \\
+\midrule
+0 & No relevante \\
+1 & Marginal \\
+2 & Relevante \\
+3 & Muy relevante \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Esta escala permite distinguir documentos inútiles, parcialmente útiles y altamente relevantes. El feedback positivo puede promover resultados en búsquedas futuras, mientras que el feedback negativo puede reducir su peso. Por tanto, el módulo combina una señal automática provisional, la pseudo-relevancia, con una señal persistente y explícita, el feedback del usuario.
+
+\section{Flujo de funcionamiento}
+
+El flujo general depende de si existe feedback previo para la consulta. Si no existe, el módulo puede ejecutar una recuperación inicial, asumir como pseudo-relevantes los primeros resultados, extraer términos candidatos y construir una consulta expandida. Luego ejecuta la búsqueda usando esa consulta enriquecida.
+
+Si sí existe feedback, el sistema puede consultar los registros asociados a la consulta normalizada o a consultas semánticamente similares. En ese caso, el módulo puede usar esa información para ajustar los resultados recuperados. Un chunk valorado como muy relevante puede recibir un boost; uno valorado como no relevante puede recibir una penalización. El ajuste complementa la puntuación original, no la sustituye por completo.
+
+En el frontend, este flujo se utiliza dentro de una comparación A/B. El proceso es:
+
+\begin{enumerate}
+  \item El usuario introduce una consulta en el Explorador de Búsqueda.
+  \item El frontend evalúa \texttt{query\_feedback\_comparison\_probability} para decidir si muestra comparación.
+  \item Si no se activa, se ejecuta la búsqueda normal.
+  \item Si se activa, se consulta \texttt{/feedback?query=...} para saber si hay feedback previo.
+  \item Si no hay feedback, se compara búsqueda estándar contra búsqueda expandida.
+  \item Si hay feedback, se compara búsqueda estándar contra búsqueda con feedback.
+  \item El usuario elige entre \textit{Prefiero A}, \textit{Prefiero B}, \textit{Ambas son útiles} o \textit{Ninguna me sirve}.
+  \item La preferencia se persiste como feedback.
+\end{enumerate}
+
+Esta separación mantiene intactos los modos existentes de búsqueda BM25, vectorial, híbrida y comparación tradicional. La comparación A/B solo se activa cuando corresponde según la configuración.
+
+\section{Persistencia y reutilización del feedback}
+
+El feedback se almacena en la tabla \texttt{query\_feedback}. Cada registro relaciona una consulta con un chunk y una valoración de relevancia. Los campos principales son:
+
+\begin{lstlisting}
+query
+normalized_query
+chunk_id
+source_id
+relevance
+notes
+session_id
+created_at
+updated_at
+\end{lstlisting}
+
+La consulta original se conserva en \texttt{query}, mientras que \texttt{normalized\_query} permite reutilizar feedback aunque existan diferencias superficiales de mayúsculas, espacios o puntuación. Por ejemplo, \texttt{Python Decorators}, \texttt{python decorators} y \texttt{python decorators?} pueden resolverse a una forma normalizada común.
+
+La reutilización puede ser exacta o semántica. La coincidencia exacta usa la consulta normalizada. La coincidencia semántica permite encontrar consultas históricas muy parecidas, pero con un umbral alto para evitar transferir feedback a preguntas distintas. Esto es importante porque un feedback válido para \texttt{python list comprehension} no necesariamente debe afectar una consulta sobre \texttt{python generator expression}.
+
+El campo \texttt{notes} permite registrar el origen del feedback, por ejemplo si proviene de una comparación A/B. El campo \texttt{session\_id} queda disponible para asociar señales a una sesión concreta en futuras extensiones. La persistencia en base de datos permite que el aprendizaje sobreviva reinicios y se acumule progresivamente.
+
+\section{Expansión y re-ranking}
+
+El endpoint \texttt{POST /api/v1/query-feedback/expand} permite ejecutar únicamente la expansión de una consulta. Devuelve \texttt{original\_query}, \texttt{expanded\_query}, \texttt{expansion\_terms}, método utilizado y cantidad de documentos usados como evidencia. Aunque este endpoint es útil para trazabilidad y pruebas aisladas, el flujo principal no necesita llamarlo directamente porque la expansión también ocurre dentro de la búsqueda expandida.
+
+La búsqueda expandida se ejecuta mediante \texttt{POST /api/v1/query-feedback/search}. Cuando \texttt{expansion\_enabled} está activo, el servicio expande la consulta y luego recupera resultados. La respuesta incluye tanto los resultados como información de trazabilidad: consulta expandida, términos añadidos y documentos usados en la expansión.
+
+El re-ranking por feedback se ejecuta mediante \texttt{POST /api/v1/query-feedback/search-with-feedback}. Este endpoint permite activar expansión, feedback exacto y feedback semántico. Su respuesta conserva la puntuación original y la puntuación ajustada:
+
+\begin{lstlisting}
+original_score
+adjusted_score
+feedback_boost
+feedback_applied
+feedback_relevance
+feedback_match_type
+\end{lstlisting}
+
+Con esta información se puede comprobar si un resultado fue promovido o penalizado por feedback. El diseño evita que el ajuste sea opaco: cada resultado puede indicar si se aplicó feedback, qué tipo de coincidencia se usó y qué relevancia histórica fue encontrada.
+
+\section{Comparación A/B e integración frontend}
+
+La comparación A/B es la interfaz principal para capturar preferencias. La opción A representa la búsqueda híbrida estándar. La opción B representa una estrategia mejorada: búsqueda con expansión cuando no existe feedback previo, o búsqueda con feedback cuando sí existe historial para la consulta.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Caso} & \textbf{Opción A} & \textbf{Opción B} \\
+\midrule
+Sin feedback & Híbrida estándar & Búsqueda expandida \\
+Con feedback & Híbrida estándar & Búsqueda con feedback \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+El frontend se organiza en tres piezas. \texttt{queryFeedback.service.ts} encapsula las llamadas HTTP al backend. \texttt{useQueryFeedbackComparison.ts} concentra la lógica de activación, consulta de feedback previo, ejecución de estrategias y guardado de preferencias. \texttt{Search.tsx} integra el flujo en el modo de Exploración y renderiza dos columnas de resultados cuando la comparación se activa.
+
+La configuración visible se agregó en \texttt{Settings.tsx}, dentro de \textit{Retrieval y RAG}, bajo el bloque \textit{Retroalimentación de búsqueda}. Allí se expone el parámetro \texttt{query\_feedback\_comparison\_probability}, que controla la frecuencia de aparición de la comparación. Esta ubicación es coherente porque el módulo afecta el comportamiento de recuperación, junto a controles como Reranker, HyDE y cantidad de chunks.
+
+\section{API del módulo}
+
+El módulo expone su API bajo el prefijo \texttt{/api/v1/query-feedback}. Los endpoints principales son:
+
+\begin{center}
+\begin{tabular}{p{0.39\textwidth}p{0.52\textwidth}}
+\toprule
+\textbf{Endpoint} & \textbf{Función} \\
+\midrule
+\texttt{GET /health} & Verifica disponibilidad del módulo. \\
+\texttt{POST /expand} & Ejecuta solo expansión de consulta. \\
+\texttt{POST /search} & Ejecuta búsqueda con expansión opcional. \\
+\texttt{POST /search-with-feedback} & Ejecuta búsqueda con expansión y re-ranking por feedback. \\
+\texttt{POST /feedback} & Guarda o actualiza feedback de una consulta y un chunk. \\
+\texttt{GET /feedback?query=...} & Recupera feedback asociado a una consulta normalizada. \\
+\texttt{GET /feedback/summary} & Devuelve estadísticas agregadas del feedback almacenado. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+La separación de endpoints permite probar expansión, búsqueda, re-ranking y persistencia de forma independiente. El frontend usa \texttt{/feedback?query=...} para decidir qué comparación mostrar, \texttt{/search} para búsqueda expandida, \texttt{/search-with-feedback} para re-ranking y \texttt{/feedback} para persistir preferencias. El endpoint \texttt{/feedback/summary} está disponible para métricas agregadas, aunque no se muestra todavía como panel analítico.
+
+\section{Configuración operativa}
+
+El parámetro principal expuesto al usuario es:
+
+\begin{lstlisting}
+query_feedback_comparison_probability
+\end{lstlisting}
+
+Sus valores van de 0.0 a 1.0. Un valor de 0.0 nunca muestra comparación, 0.25 la muestra ocasionalmente y 1.0 la muestra siempre, lo cual es útil para pruebas o demostraciones. Al guardarse desde Settings, el valor se normaliza a dos decimales antes de enviarse al backend.
+
+El flujo de búsqueda con feedback también usa parámetros internos como \texttt{expansion\_enabled}, \texttt{feedback\_enabled}, \texttt{semantic\_feedback\_enabled}, \texttt{semantic\_similarity\_threshold}, \texttt{top\_k\_feedback} y \texttt{max\_expansion\_terms}. En la versión actual, algunos de estos valores se fijan desde el frontend para mantener un comportamiento conservador. Por ejemplo, la similitud semántica se usa con umbral alto para reutilizar feedback solo cuando las consultas son muy cercanas.
+
+HyDE permanece como una configuración separada. Aunque también enriquece la búsqueda, su mecanismo es distinto: genera una hipótesis mediante LLM para mejorar la recuperación semántica. Query Feedback, en cambio, usa pseudo-relevancia y feedback histórico. Por eso ambos controles conviven en \textit{Retrieval y RAG}, pero se describen de forma diferenciada.
+
+\section{Pruebas y validación}
+
+El backend incluye pruebas específicas para expansión, persistencia, re-ranking, servicio y rutas API:
+
+\begin{lstlisting}
+test_query_feedback_expansion.py
+test_query_feedback_repository.py
+test_query_feedback_reranker.py
+test_query_feedback_service.py
+test_query_feedback_api_routes.py
+\end{lstlisting}
+
+Estas pruebas cubren expansión con documentos pseudo-relevantes, ausencia de evidencia suficiente, almacenamiento y actualización de feedback, consulta por query normalizada, resumen agregado, boosts positivos, penalizaciones negativas, coincidencia exacta, coincidencia semántica y validación de parámetros inválidos.
+
+En frontend se validó compilación con \texttt{npm run build}, integración del hook en modo Exploración, preservación de Evaluación y Métricas, preservación de búsqueda normal y comparación tradicional, visualización de comparación A/B, guardado de preferencias y edición de la probabilidad desde Settings. También se verificó que \texttt{.env.local} y artefactos de \texttt{dist/} no fueran incluidos en commits.
+
+\section{Justificación y limitaciones}
+
+La solución cumple el objetivo del módulo porque introduce una capa de mejora sin sustituir los mecanismos base de recuperación. La expansión por pseudo-relevancia evita depender de diccionarios externos y aprovecha el propio corpus técnico. El feedback explícito aporta una señal humana persistente que puede ser más precisa que la inferencia automática del ranking.
+
+La comparación A/B reduce la carga del usuario: en lugar de evaluar muchos documentos individualmente, compara dos variantes de ranking y guarda una preferencia simple. Esta preferencia se transforma en feedback reutilizable. Además, el diseño conserva trazabilidad mediante consulta expandida, términos añadidos, puntuación original, puntuación ajustada y tipo de coincidencia de feedback.
+
+La principal limitación es que la primera integración está en el Explorador de Búsqueda y no en el Chat. Por tanto, el módulo mejora y valida flujos de recuperación, pero no modifica directamente la respuesta conversacional final. Una extensión futura consistiría en conectar \texttt{search-with-feedback} al pipeline \texttt{/api/v1/rag/query} para que el Chat use resultados reordenados por feedback antes de generar una respuesta.
+
+Otra limitación es que la pseudo-relevancia depende de la calidad del ranking inicial. Si los primeros documentos no son realmente relevantes, los términos extraídos pueden no mejorar la consulta. Además, la comparación A/B solo registra feedback sobre resultados principales, no sobre todos los documentos mostrados. Finalmente, un feedback histórico incorrecto o sesgado puede afectar búsquedas futuras, por lo que la trazabilidad del ajuste resulta esencial.
+
+\end{document}
