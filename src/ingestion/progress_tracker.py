@@ -56,16 +56,42 @@ class IngestionTracker:
                 prog.phase = "indexing"
                 prog.progress_pct = 0.0
 
-    def page_done(self, source_id: str, chunks_this_page: int) -> None:
+    def page_crawled(self, source_id: str, pages_total_estimate: int = 0) -> None:
+        """Advance progress counter immediately when a page is fetched.
+
+        Called right after the crawler yields a page, before the slow scrape+embed pipeline.
+        This keeps the UI progress bar moving at crawl speed (~1 req/sec) rather than stalling
+        for the full indexing latency of large pages.
+        """
+        with self._lock:
+            prog = self._active.get(source_id)
+            if prog:
+                prog.pages_scraped += 1
+                if pages_total_estimate > 0:
+                    prog.pages_total = max(prog.pages_total, pages_total_estimate)
+                if prog.pages_total > 0:
+                    raw = prog.pages_scraped / prog.pages_total * 100
+                    prog.progress_pct = round(min(raw, 99.0), 1)
+
+    def add_indexed_chunks(self, source_id: str, chunks_this_page: int) -> None:
+        """Record how many chunks were indexed for a page (called after embed+index)."""
+        with self._lock:
+            prog = self._active.get(source_id)
+            if prog:
+                prog.chunks_indexed += chunks_this_page
+
+    def page_done(self, source_id: str, chunks_this_page: int, pages_total_estimate: int = 0) -> None:
+        """Legacy combined call: advance progress and record chunks in one step."""
         with self._lock:
             prog = self._active.get(source_id)
             if prog:
                 prog.pages_scraped += 1
                 prog.chunks_indexed += chunks_this_page
+                if pages_total_estimate > 0:
+                    prog.pages_total = max(prog.pages_total, pages_total_estimate)
                 if prog.pages_total > 0:
-                    prog.progress_pct = round(
-                        prog.pages_scraped / prog.pages_total * 100, 1
-                    )
+                    raw = prog.pages_scraped / prog.pages_total * 100
+                    prog.progress_pct = round(min(raw, 99.0), 1)
 
     def complete(self, source_id: str) -> None:
         now = _now()
@@ -90,6 +116,14 @@ class IngestionTracker:
     def get(self, source_id: str) -> IngestionProgress | None:
         with self._lock:
             return self._active.get(source_id)
+
+    def clear_source(self, source_id: str) -> None:
+        """Remove all tracking state for a source (after deindexing)."""
+        with self._lock:
+            self._active.pop(source_id, None)
+            self._history.pop(source_id, None)
+        self._save_history()
+        logger.debug("ingest_tracker_cleared source_id=%s", source_id)
 
     def seed_from_db(self, db_dates: dict[str, str]) -> None:
         """Backfill last_ingest_at from DB for sources with no JSON history entry."""

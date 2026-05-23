@@ -152,6 +152,16 @@ class VectorIndexBuilder:
         with self._lock:
             self._flush_locked(force=True)
 
+    def remove_documents(self, doc_ids: list[str]) -> int:
+        """Bulk soft-delete documents. Tombstones them in memory so searches skip them immediately."""
+        count = self._vector_repo.delete_by_doc_ids(doc_ids)
+        if count > 0:
+            with self._lock:
+                for doc_id in doc_ids:
+                    if doc_id in self.vector_store.doc_ids_to_vector_ids:
+                        self.vector_store.mark_deleted(doc_id)
+        return count
+
     def remove_document(self, doc_id: str) -> bool:
         """Soft-delete a document from the vector index.
 

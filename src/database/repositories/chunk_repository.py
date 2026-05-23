@@ -83,6 +83,24 @@ class ChunkRepository:
                 select(func.count(func.distinct(self.chunk_model.url)))
             ).scalar_one()
 
+    def get_chunk_ids_by_source_id(self, source_id: str) -> list[str]:
+        """Return all chunk_ids belonging to a source."""
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(self.chunk_model.chunk_id).where(self.chunk_model.source_id == source_id)
+            ).all()
+        return [row.chunk_id for row in rows]
+
+    def delete_by_source_id(self, source_id: str) -> int:
+        """Hard-delete all chunks for a source. Returns count of deleted rows."""
+        from sqlalchemy import delete as sa_delete
+        with Session(self.engine) as session, session.begin():
+            result = session.execute(
+                sa_delete(self.chunk_model).where(self.chunk_model.source_id == source_id)
+            )
+        logger.info("chunks_deleted source_id=%s count=%s", source_id, result.rowcount)
+        return result.rowcount
+
     def max_created_at_by_source_ids(self, source_ids: list[str]) -> dict[str, str]:
         """Return MAX(created_at) ISO string per source_id for the given IDs."""
         if not source_ids:

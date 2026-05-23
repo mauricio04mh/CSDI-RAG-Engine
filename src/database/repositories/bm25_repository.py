@@ -69,6 +69,25 @@ class BM25Repository:
 
         logger.info("bm25_segment_persisted segment_id=%s", segment.segment_id)
 
+    def delete_doc_ids(self, doc_ids: list[str]) -> int:
+        """Remove all BM25 postings and doc_length rows for the given doc_ids.
+
+        Called when deindexing a source so the next reload skips these docs.
+        Returns the count of doc_length rows deleted.
+        """
+        if not doc_ids:
+            return 0
+        with Session(self.engine) as session, session.begin():
+            session.execute(
+                delete(self.posting_model).where(self.posting_model.doc_id.in_(doc_ids))
+            )
+            result = session.execute(
+                delete(self.doc_length_model).where(self.doc_length_model.doc_id.in_(doc_ids))
+            )
+        count = result.rowcount
+        logger.info("bm25_doc_ids_deleted count=%s", count)
+        return count
+
     def delete_segment(self, segment_id: str) -> None:
         """Delete a segment and cascade to terms/postings/doc_lengths."""
         with Session(self.engine) as session:

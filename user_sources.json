@@ -1,12 +1,5 @@
 [
   {
-    "source_id": "url:www.wikipedia.org:72e64cabc2",
-    "name": "URL Source www.wikipedia.org",
-    "base_url": "https://www.wikipedia.org/",
-    "source_kind": "url_manual",
-    "added_at": "2026-05-23T04:06:00.590884+00:00"
-  },
-  {
     "source_id": "EDA II - 2025 - extraordinario",
     "name": "EDA II - 2025 - extraordinario",
     "base_url": "upload://EDA II - 2025 - extraordinario.pdf",

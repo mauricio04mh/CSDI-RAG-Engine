@@ -25,6 +25,7 @@ class CrawlStageService:
         return self._crawler.crawl(source)
 
     def crawl_iter(self, source: SourceConfig):
+        """Yield (CrawledPage, pages_estimate) tuples as pages are fetched."""
         return self._crawler.crawl_iter(source)
 
 

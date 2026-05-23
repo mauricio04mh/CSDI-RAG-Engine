@@ -622,25 +622,6 @@
     }
   },
   {
-    "source_id": "nodejs_docs",
-    "name": "Node.js Docs",
-    "base_url": "https://nodejs.org",
-    "allowed_domains": ["nodejs.org"],
-    "seed_urls": ["https://nodejs.org/docs/latest/api/"],
-    "allowed_path_prefixes": ["/docs/latest/api/"],
-    "blocked_path_patterns": ["/download", "/blog"],
-    "max_depth": 2,
-    "technology": ["nodejs", "javascript", "runtime"],
-    "max_pages": 250,
-    "scraper": {
-      "main_content_selectors": ["main", "article", "#apicontent", "#content", "[role=\"main\"]"],
-      "title_selectors": ["main h1", "article h1", "#apicontent h1", "h1", "title"],
-      "breadcrumb_selectors": ["nav[aria-label=\"breadcrumb\"] a", ".breadcrumb a"],
-      "code_block_selectors": ["pre", "code"],
-      "exclude_selectors": ["script", "style", "noscript", "header", "footer", "nav", "aside", ".toc", ".sidebar"]
-    }
-  },
-  {
     "source_id": "go_docs",
     "name": "Go Docs",
     "base_url": "https://go.dev",
@@ -666,7 +647,7 @@
     "allowed_domains": ["doc.rust-lang.org"],
     "seed_urls": ["https://doc.rust-lang.org/book/"],
     "allowed_path_prefixes": ["/book/"],
-    "blocked_path_patterns": ["/search"],
+    "blocked_path_patterns": ["/search", "/book/print.html"],
     "max_depth": 2,
     "technology": ["rust", "language"],
     "max_pages": 200,
