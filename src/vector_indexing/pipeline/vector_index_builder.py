@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,34 @@ from src.vector_indexing.index.faiss_index import FaissIndex
 from src.vector_indexing.index.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+# Fraction of available CPU cores reserved for background ingestion encoding.
+# The remaining cores stay available for real-time search query encoding.
+_INGEST_CPU_FRACTION = 0.5
+
+
+def _encode_with_limited_threads(embedding_model, texts: list[str]):
+    """Run embedding_model.encode() with a reduced PyTorch intra-op thread count.
+
+    During ingestion we cap OpenMP/MKL threads to _INGEST_CPU_FRACTION of the
+    available cores. This leaves dedicated CPU capacity for concurrent search
+    query encoding so searches aren't starved by large ingestion batches.
+
+    The original thread count is always restored in a finally block.
+    """
+    try:
+        import torch
+        total = os.cpu_count() or 1
+        ingest_threads = max(1, int(total * _INGEST_CPU_FRACTION))
+        old_threads = torch.get_num_threads()
+        torch.set_num_threads(ingest_threads)
+        try:
+            return embedding_model.encode(texts)
+        finally:
+            torch.set_num_threads(old_threads)
+    except Exception:
+        # torch unavailable or set_num_threads failed — fall back gracefully
+        return embedding_model.encode(texts)
 
 
 @dataclass(slots=True)
@@ -57,6 +86,14 @@ class VectorIndexBuilder:
         self._buffer_doc_ids: list[str] = []
         self._buffer_texts: list[str] = []    # raw texts; embedded in batch at flush
         self._lock = threading.RLock()
+        # Serializes flush operations so at most one batch is encoding at a time.
+        # Held during the slow encode step; _lock is released then, so searches
+        # can read the FAISS index concurrently with an ongoing ingestion flush.
+        self._encode_lock = threading.Lock()
+        # Tracks doc_ids that have been drained from the buffer but not yet
+        # committed to vector_store. Included in the duplicate check so a
+        # concurrent add_document() cannot race into the gap between drain and commit.
+        self._inflight_doc_ids: set[str] = set()
 
     def start(self) -> None:
         """Seed the in-memory FAISS index from the database."""
@@ -143,14 +180,10 @@ class VectorIndexBuilder:
 
         Returns the number of documents that were flushed.
         """
-        with self._lock:
-            count = len(self._buffer_doc_ids)
-            self._flush_locked(force=True)
-            return count
+        return self._flush(force=True)
 
     def stop(self) -> None:
-        with self._lock:
-            self._flush_locked(force=True)
+        self._flush(force=True)
 
     def remove_documents(self, doc_ids: list[str]) -> int:
         """Bulk soft-delete documents. Tombstones them in memory so searches skip them immediately."""
@@ -179,39 +212,82 @@ class VectorIndexBuilder:
             raise ValueError("Document text must not be empty.")
 
         with self._lock:
-            if doc_id in self.vector_store.doc_ids_to_vector_ids or doc_id in self._buffer_doc_ids:
+            if (
+                doc_id in self.vector_store.doc_ids_to_vector_ids
+                or doc_id in self._buffer_doc_ids
+                or doc_id in self._inflight_doc_ids
+            ):
                 raise ValueError(f"Document '{doc_id}' already exists in the vector index.")
 
-            # Buffer raw text; the whole batch is embedded at once in _flush_locked().
             self._buffer_doc_ids.append(doc_id)
             self._buffer_texts.append(text)
+            should_flush = len(self._buffer_doc_ids) >= self.settings.vector_batch_size
 
-            persisted = False
-            if len(self._buffer_doc_ids) >= self.settings.vector_batch_size:
-                self._flush_locked(force=True)
-                persisted = True
+        # Flush outside _lock so the slow encode step does not block searches.
+        if should_flush:
+            self._flush(force=True)
 
+        with self._lock:
             return IndexedVectorDocument(
                 doc_id=doc_id,
                 buffered_documents=len(self._buffer_doc_ids),
                 indexed_documents=len(self.vector_store),
-                persisted=persisted,
+                persisted=should_flush,
             )
 
-    def _flush_locked(self, force: bool = False) -> bool:
-        """Embed the buffered texts in one batch, then persist to FAISS and the database."""
-        if not self._buffer_doc_ids:
-            return False
-        if not force and len(self._buffer_doc_ids) < self.settings.vector_batch_size:
-            return False
+    def _flush(self, force: bool = False) -> int:
+        """Drain the buffer, encode outside _lock, then commit to FAISS.
 
-        vectors = self.embedding_model.encode(self._buffer_texts)
-        self.vector_store.add_documents(self._buffer_doc_ids)
-        self.faiss_index.add(vectors)
-        self._persist(self._buffer_doc_ids, vectors)
-        self._buffer_doc_ids = []
-        self._buffer_texts = []
-        return True
+        _encode_lock serializes concurrent flush calls so only one batch
+        encodes at a time. _lock is released before encoding, letting
+        VectorRetriever.search() read the FAISS index without waiting for
+        the (potentially slow) CPU encoding step to finish.
+
+        Returns the number of documents flushed (0 when there was nothing to do).
+        """
+        with self._encode_lock:
+            # Snapshot and drain the buffer atomically. Mark drained docs as
+            # inflight so concurrent add_document() calls see them during the
+            # gap between drain and vector_store commit (closes race condition).
+            with self._lock:
+                if not self._buffer_doc_ids:
+                    return 0
+                if not force and len(self._buffer_doc_ids) < self.settings.vector_batch_size:
+                    return 0
+                batch_doc_ids = self._buffer_doc_ids
+                batch_texts = self._buffer_texts
+                self._buffer_doc_ids = []
+                self._buffer_texts = []
+                self._inflight_doc_ids.update(batch_doc_ids)
+
+            # Encode while holding _encode_lock but NOT _lock.
+            # Searches can read the FAISS index freely during this step.
+            # Limit PyTorch/OpenMP threads to half available CPUs so search
+            # query encoding always has dedicated cores and is not starved.
+            vectors = _encode_with_limited_threads(self.embedding_model, batch_texts)
+
+            # Commit to the in-memory index under _lock, clearing inflight first.
+            with self._lock:
+                self._inflight_doc_ids.difference_update(batch_doc_ids)
+                self.vector_store.add_documents(batch_doc_ids)
+                self.faiss_index.add(vectors)
+
+            # DB + disk persistence needs no in-memory lock.
+            # On failure: soft-delete the in-memory entries so searches skip
+            # them, and they can be re-indexed cleanly after a restart.
+            try:
+                self._persist(batch_doc_ids, vectors)
+            except Exception:
+                with self._lock:
+                    for doc_id in batch_doc_ids:
+                        self.vector_store.mark_deleted(doc_id)
+                logger.error(
+                    "vector_persist_failed count=%s — in-memory entries soft-deleted; "
+                    "will be re-indexable after restart",
+                    len(batch_doc_ids),
+                )
+                raise
+            return len(batch_doc_ids)
 
     def _persist(self, doc_ids: list[str], vectors: np.ndarray) -> None:
         """Persist new vectors to the database and optionally to a FAISS binary file."""

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from src.document_processing.chunker import Chunker
@@ -69,53 +70,58 @@ async def upload_file(
     if not data:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    chunk_ingestion: ChunkIngestionService = request.app.state.chunk_ingestion_service
+    user_source_repo = request.app.state.user_source_repo
+
+    # All CPU/IO-heavy work runs in a thread so the asyncio event loop stays
+    # free to serve polls and other requests while the upload is processed.
+    def _process() -> UploadResponse:
+        try:
+            text = _extract_text(filename, data)
+        except ValueError as exc:
+            raise exc
+
+        if not text.strip():
+            raise ValueError("No extractable text found in file.")
+
+        chunks = Chunker().chunk(
+            source_id=source_id,
+            url=f"upload://{filename}",
+            title=Path(filename).stem,
+            breadcrumb="",
+            content=text,
+        )
+
+        if not chunks:
+            raise ValueError("File produced no chunks after processing.")
+
+        ingestion_result = chunk_ingestion.ingest_chunks(chunks)
+        finalize_result = chunk_ingestion.finalize(reload_bm25=True)
+        if finalize_result.vector_flushed:
+            logger.debug("upload_vector_buffer_flushed count=%s", finalize_result.vector_flushed)
+
+        user_source_repo.register(
+            source_id=source_id,
+            name=Path(filename).stem,
+            base_url=f"upload://{filename}",
+            source_kind="upload_file",
+        )
+
+        logger.info(
+            "upload_complete source_id=%s filename=%s produced=%s indexed=%s",
+            source_id,
+            filename,
+            len(chunks),
+            ingestion_result.indexed_chunks,
+        )
+        return UploadResponse(
+            source_id=source_id,
+            filename=filename,
+            chunks_produced=len(chunks),
+            chunks_indexed=ingestion_result.indexed_chunks,
+        )
+
     try:
-        text = _extract_text(filename, data)
+        return await run_in_threadpool(_process)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    if not text.strip():
-        raise HTTPException(status_code=422, detail="No extractable text found in file.")
-
-    chunk_ingestion: ChunkIngestionService = request.app.state.chunk_ingestion_service
-
-    chunker = Chunker()
-    chunks = chunker.chunk(
-        source_id=source_id,
-        url=f"upload://{filename}",
-        title=Path(filename).stem,
-        breadcrumb="",
-        content=text,
-    )
-    chunks_produced = len(chunks)
-
-    if not chunks:
-        raise HTTPException(status_code=422, detail="File produced no chunks after processing.")
-
-    ingestion_result = chunk_ingestion.ingest_chunks(chunks)
-    chunks_indexed = ingestion_result.indexed_chunks
-    finalize_result = chunk_ingestion.finalize(reload_bm25=True)
-    if finalize_result.vector_flushed:
-        logger.debug("upload_vector_buffer_flushed count=%s", finalize_result.vector_flushed)
-
-    user_source_repo = request.app.state.user_source_repo
-    user_source_repo.register(
-        source_id=source_id,
-        name=Path(filename).stem,
-        base_url=f"upload://{filename}",
-        source_kind="upload_file",
-    )
-
-    logger.info(
-        "upload_complete source_id=%s filename=%s produced=%s indexed=%s",
-        source_id,
-        filename,
-        chunks_produced,
-        chunks_indexed,
-    )
-    return UploadResponse(
-        source_id=source_id,
-        filename=filename,
-        chunks_produced=chunks_produced,
-        chunks_indexed=chunks_indexed,
-    )
